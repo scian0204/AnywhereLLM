@@ -24,6 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkey.start()
         hotkeyManager = hotkey
 
+        // Re-register the global hotkey immediately when the settings recorder saves a new one.
+        SettingsWindowController.shared.onHotkeyChanged = { [weak self] in
+            self?.hotkeyManager?.stop()
+            self?.hotkeyManager?.start()
+        }
+
         // ponytail: 5s poll instead of AX notification observer; simplest way to refresh grant state
         accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshAccessibility() }
@@ -99,6 +105,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestAccessibility(prompt: true)
     }
 
+    @objc private func openSettings() {
+        SettingsWindowController.shared.show()
+    }
+
     // MARK: - Menu
 
     private func rebuildMenu() {
@@ -115,8 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(.separator())
         }
 
-        let settings = NSMenuItem(title: "설정…", action: nil, keyEquivalent: ",")
-        settings.isEnabled = false // 자리만 — 동작 없음
+        let settings = NSMenuItem(title: "설정…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
         menu.addItem(settings)
 
         menu.addItem(.separator())
