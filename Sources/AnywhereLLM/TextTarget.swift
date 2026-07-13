@@ -163,6 +163,29 @@ enum TextTargetService {
         pb.writeObjects(newItems)
     }
 
+    // MARK: - Unicode typing (real-time streaming insert)
+
+    /// Type `text` into the focused element as synthetic Unicode key events —
+    /// no clipboard, no AX. Used for streaming insert so chunks land as they arrive.
+    /// The panel is non-activating, so the target app keeps focus and receives these.
+    static func typeText(_ text: String) {
+        guard !text.isEmpty else { return }
+        // ponytail: 20 UTF-16 units/event is a safe chunk; CGEventKeyboardSetUnicodeString
+        // truncates very long strings. Bump if a target drops characters.
+        let units = Array(text.utf16)
+        let source = CGEventSource(stateID: .privateState)
+        for start in stride(from: 0, to: units.count, by: 20) {
+            var slice = Array(units[start..<min(start + 20, units.count)])
+            guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
+            else { continue }
+            down.keyboardSetUnicodeString(stringLength: slice.count, unicodeString: &slice)
+            up.keyboardSetUnicodeString(stringLength: slice.count, unicodeString: &slice)
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+    }
+
     // MARK: - CGEvent injection
 
     /// Post a ⌘+<key> keystroke. Uses a private (non-HID) event source so the

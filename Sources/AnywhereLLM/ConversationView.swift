@@ -1,14 +1,52 @@
 import SwiftUI
 
-/// The panel's conversation UI. Selection preview (collapsed) on top, transcript
-/// in the middle (auto-scrolling), input at the bottom. ⏎ sends, ⇧⏎ newlines,
-/// ⌘⏎ confirms a pending result.
+/// The panel UI. Two layouts:
+///
+/// - **Insert mode** (no selection): just the input box. On send, the reply
+///   streams straight into the target text box; the panel shows a "생성 중…" state
+///   and closes when done.
+/// - **Select mode** (selection present): selection preview + transcript +
+///   input + a preview/replace confirm button, with multi-turn.
+///
+/// ⏎ sends, ⇧⏎ newlines, ⌘⏎ confirms a pending replacement, Esc closes.
 struct ConversationView: View {
     @ObservedObject var controller: ConversationController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
 
     var body: some View {
+        Group {
+            if controller.hasSelection {
+                selectMode
+            } else {
+                insertMode
+            }
+        }
+        .padding(12)
+        .frame(width: 460)
+        .onAppear { inputFocused = true }
+    }
+
+    // MARK: - Insert mode
+
+    private var insertMode: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if controller.isStreaming {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("생성 중… (Esc 취소)").font(.callout).foregroundStyle(.secondary)
+                }
+            } else {
+                inputField(placeholder: "무엇이든 물어보세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
+            }
+
+            if let error = controller.errorMessage { errorText(error) }
+        }
+    }
+
+    // MARK: - Select mode
+
+    private var selectMode: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let selection = controller.selectionPreview {
                 selectionPreview(selection)
@@ -18,25 +56,39 @@ struct ConversationView: View {
                 transcriptScroll
             }
 
-            if let error = controller.errorMessage {
-                Text(error)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            if let error = controller.errorMessage { errorText(error) }
 
-            inputRow
+            HStack(alignment: .bottom, spacing: 8) {
+                inputField(placeholder: "지시를 입력하세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
+                if controller.isStreaming {
+                    ProgressView().controlSize(.small)
+                }
+            }
 
             if controller.pendingResult != nil {
                 applyButton
             }
         }
-        .padding(12)
-        .frame(width: 460)
-        .onAppear { inputFocused = true }
     }
 
-    // MARK: - Pieces
+    // MARK: - Shared pieces
+
+    private func inputField(placeholder: String) -> some View {
+        TextField(placeholder, text: $input, axis: .vertical)
+            .textFieldStyle(.plain)
+            .lineLimit(1...6)
+            .focused($inputFocused)
+            .onSubmit(send)
+            .padding(8)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func errorText(_ error: String) -> some View {
+        Text(error)
+            .font(.callout)
+            .foregroundStyle(.red)
+            .fixedSize(horizontal: false, vertical: true)
+    }
 
     private func selectionPreview(_ text: String) -> some View {
         Text(text)
@@ -84,28 +136,9 @@ struct ConversationView: View {
             )
     }
 
-    private var inputRow: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            // ⏎ sends, ⇧⏎ inserts a newline (default TextField axis: .vertical behavior).
-            TextField("무엇이든 물어보세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)",
-                      text: $input, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...6)
-                .focused($inputFocused)
-                .onSubmit(send)
-                .padding(8)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-
-            if controller.isStreaming {
-                ProgressView().controlSize(.small)
-            }
-        }
-    }
-
     private var applyButton: some View {
         Button(action: controller.applyPending) {
-            Text(controller.hasSelection ? "교체 (⌘⏎)" : "삽입 (⌘⏎)")
-                .frame(maxWidth: .infinity)
+            Text("교체 (⌘⏎)").frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .keyboardShortcut(.return, modifiers: .command)

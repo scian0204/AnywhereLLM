@@ -48,6 +48,11 @@ final class PromptPanel: NSPanel {
         controller.onApply = { [weak self] result in
             self?.apply(result, into: context)
         }
+        // Insert mode already typed live into the target — just close and reset.
+        controller.onStreamingInsertDone = { [weak self] in
+            self?.controller = nil
+            self?.orderOut(nil)
+        }
         self.controller = controller
 
         let host = NSHostingView(rootView: ConversationView(controller: controller))

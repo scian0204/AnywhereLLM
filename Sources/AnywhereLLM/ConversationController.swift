@@ -1,7 +1,8 @@
 import AppKit
+import LLMCore
 import SwiftUI
 
-/// One line in the on-screen transcript.
+/// One line in the on-screen transcript (select mode only).
 struct TranscriptEntry: Identifiable {
     enum Role { case user, assistant }
     let id = UUID()
@@ -9,11 +10,16 @@ struct TranscriptEntry: Identifiable {
     var text: String
 }
 
-/// Drives one panel session: holds the captured target, the transcript, and the
-/// streaming LLM task. Built fresh each time the panel opens and reset when it closes.
+/// Drives one panel session. Two modes, decided by whether text was selected:
+///
+/// - **Insert mode** (no selection): the reply is typed straight into the target
+///   text box as it streams (clipboard-free Unicode key events). No transcript,
+///   no buttons. `applyMode` is ignored — insert is always live streaming.
+/// - **Select mode** (selection present): full transcript UI with multi-turn and
+///   a preview/immediate `applyMode` for confirming the replacement.
 ///
 /// Settings (UserDefaults, defaults hardcoded — settings UI is step 6):
-///   applyMode       "preview"(default) / "immediate"
+///   applyMode       "preview"(default) / "immediate"   [select mode only]
 ///   includeAppName  Bool (default true)
 ///   includeFullText Bool (default false)
 ///   systemPrompt    String (default "")
@@ -27,18 +33,20 @@ final class ConversationController: ObservableObject {
     @Published var transcript: [TranscriptEntry] = []
     @Published var isStreaming = false
     @Published var errorMessage: String?
-    /// The last completed assistant reply, awaiting insert confirmation (preview mode).
+    /// Select mode: the completed reply awaiting insert confirmation (preview).
     @Published var pendingResult: String?
 
     let context: TargetContext
-    /// True when there was a selection to replace, false for caret insertion.
+    /// True when there was a selection to replace (select mode), false for insert mode.
     var hasSelection: Bool { (context.selectedText?.isEmpty == false) }
 
     private let client: LLMClient
     private let defaults: UserDefaults
     private var streamTask: Task<Void, Never>?
-    /// Closes the panel then runs insert after a focus-return delay. Injected by the panel.
+    /// Select mode: close the panel then run insert after a focus-return delay.
     var onApply: ((String) -> Void)?
+    /// Insert mode: close the panel once live streaming finishes.
+    var onStreamingInsertDone: (() -> Void)?
 
     init(context: TargetContext,
          client: LLMClient = LLMClient(),
@@ -48,7 +56,7 @@ final class ConversationController: ObservableObject {
         self.defaults = defaults
     }
 
-    /// The preview text shown collapsed at the top, if any selection was captured.
+    /// Select mode preview text (collapsed at the top of the panel).
     var selectionPreview: String? {
         guard let s = context.selectedText, !s.isEmpty else { return nil }
         return s
@@ -59,35 +67,97 @@ final class ConversationController: ObservableObject {
     func send(_ input: String) {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isStreaming else { return }
-
         errorMessage = nil
         pendingResult = nil
-        transcript.append(TranscriptEntry(role: .user, text: trimmed))
-        let assistantIndex = transcript.count
-        transcript.append(TranscriptEntry(role: .assistant, text: ""))
 
-        let messages = buildMessages(latestUserInput: trimmed)
+        if hasSelection {
+            sendSelectTurn(trimmed)
+        } else {
+            sendInsertTurn(trimmed)
+        }
+    }
+
+    // MARK: - Insert mode (live streaming into the target)
+
+    private func sendInsertTurn(_ input: String) {
+        let messages = buildMessages(latestUserInput: input, priorTurns: [])
         isStreaming = true
 
         streamTask = Task { [weak self] in
             guard let self else { return }
+            var filter = ThinkTagFilter()
+            var buffer = ""
+            var lastFlush = ContinuousClock.now
+
+            func flush() {
+                guard !buffer.isEmpty else { return }
+                TextTargetService.typeText(buffer)
+                buffer = ""
+            }
+
             do {
                 for try await chunk in client.streamChat(messages: messages) {
                     if Task.isCancelled { break }
-                    if assistantIndex < transcript.count {
-                        transcript[assistantIndex].text += chunk
+                    buffer += filter.feed(chunk)
+                    // ponytail: 100ms batching keeps event volume sane on fast streams.
+                    if ContinuousClock.now - lastFlush >= .milliseconds(100) {
+                        flush()
+                        lastFlush = .now
                     }
                 }
+                buffer += filter.flush()
+                flush()
             } catch is CancellationError {
-                // user closed the panel / sent again — leave partial text as-is
+                flush() // keep whatever was already typed
             } catch {
+                flush()
                 errorMessage = (error as? LLMError)?.errorDescription ?? error.localizedDescription
             }
-            finishStreaming(assistantIndex: assistantIndex)
+            isStreaming = false
+            // Leave the panel up on error so the message is visible; else close.
+            if errorMessage == nil { onStreamingInsertDone?() }
         }
     }
 
-    private func finishStreaming(assistantIndex: Int) {
+    // MARK: - Select mode (transcript + confirm)
+
+    private func sendSelectTurn(_ input: String) {
+        // Prior completed turns are everything currently in the transcript.
+        let prior = transcript.map {
+            ChatMessage(role: $0.role == .user ? "user" : "assistant", content: $0.text)
+        }
+        transcript.append(TranscriptEntry(role: .user, text: input))
+        let assistantIndex = transcript.count
+        transcript.append(TranscriptEntry(role: .assistant, text: ""))
+
+        let messages = buildMessages(latestUserInput: input, priorTurns: prior)
+        isStreaming = true
+
+        streamTask = Task { [weak self] in
+            guard let self else { return }
+            var filter = ThinkTagFilter()
+            do {
+                for try await chunk in client.streamChat(messages: messages) {
+                    if Task.isCancelled { break }
+                    let visible = filter.feed(chunk)
+                    if !visible.isEmpty, assistantIndex < transcript.count {
+                        transcript[assistantIndex].text += visible
+                    }
+                }
+                let tail = filter.flush()
+                if !tail.isEmpty, assistantIndex < transcript.count {
+                    transcript[assistantIndex].text += tail
+                }
+            } catch is CancellationError {
+                // leave partial text
+            } catch {
+                errorMessage = (error as? LLMError)?.errorDescription ?? error.localizedDescription
+            }
+            finishSelectStreaming(assistantIndex: assistantIndex)
+        }
+    }
+
+    private func finishSelectStreaming(assistantIndex: Int) {
         isStreaming = false
         guard errorMessage == nil, assistantIndex < transcript.count else { return }
         let result = transcript[assistantIndex].text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -100,7 +170,7 @@ final class ConversationController: ObservableObject {
         }
     }
 
-    /// Confirm the pending result (preview mode, or ⌘⏎).
+    /// Confirm the pending replacement (preview mode, or ⌘⏎).
     func applyPending() {
         guard let result = pendingResult else { return }
         onApply?(result)
@@ -115,21 +185,11 @@ final class ConversationController: ObservableObject {
 
     private var applyMode: String { defaults.string(forKey: Self.applyModeKey) ?? "preview" }
 
-    /// Builds the message array: one system message (global prompt + app context +
-    /// output discipline + mode instruction), prior turns, then the new user input
-    /// (with selected text folded in on the first turn).
-    private func buildMessages(latestUserInput: String) -> [ChatMessage] {
+    private func buildMessages(latestUserInput: String, priorTurns: [ChatMessage]) -> [ChatMessage] {
         var messages: [ChatMessage] = [ChatMessage(role: "system", content: systemContent())]
-
-        // Replay prior completed turns (everything except the two we just appended).
-        for entry in transcript.dropLast(2) {
-            messages.append(ChatMessage(
-                role: entry.role == .user ? "user" : "assistant",
-                content: entry.text
-            ))
-        }
-
-        messages.append(ChatMessage(role: "user", content: userContent(latestUserInput)))
+        messages.append(contentsOf: priorTurns)
+        let firstTurn = priorTurns.isEmpty
+        messages.append(ChatMessage(role: "user", content: userContent(latestUserInput, firstTurn: firstTurn)))
         return messages
     }
 
@@ -154,9 +214,9 @@ final class ConversationController: ObservableObject {
         return parts.joined(separator: "\n\n")
     }
 
-    private func userContent(_ input: String) -> String {
+    private func userContent(_ input: String, firstTurn: Bool) -> String {
         // Only fold the selection / full text into the FIRST user turn.
-        guard transcript.dropLast(2).isEmpty else { return input }
+        guard firstTurn else { return input }
 
         var parts: [String] = []
         if let selection = selectionPreview {
