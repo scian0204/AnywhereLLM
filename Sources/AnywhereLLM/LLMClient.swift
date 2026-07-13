@@ -80,6 +80,22 @@ final class LLMClient {
         }
     }
 
+    /// GET {baseURL}/models → sorted list of model ids. For the settings "모델 가져오기" button.
+    func fetchModels() async throws -> [String] {
+        guard let key = KeychainStore.get(), !key.isEmpty else { throw LLMError.missingAPIKey }
+        var request = URLRequest(url: URL(string: baseURL + "/models")!)
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            throw LLMError.http(status: http.statusCode,
+                                message: String(data: data, encoding: .utf8) ?? "알 수 없는 오류")
+        }
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let items = obj?["data"] as? [[String: Any]] ?? []
+        return items.compactMap { $0["id"] as? String }.sorted()
+    }
+
     private func buildRequest(messages: [ChatMessage]) throws -> URLRequest {
         guard let key = KeychainStore.get(), !key.isEmpty else {
             throw LLMError.missingAPIKey

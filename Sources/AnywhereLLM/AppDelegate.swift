@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             accessibilityDescription: "AnywhereLLM"
         )
 
+        installMainMenu()
         requestAccessibility(prompt: true)
         rebuildMenu()
 
@@ -107,6 +108,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         SettingsWindowController.shared.show()
+    }
+
+    // MARK: - Main menu (Edit menu for text-editing key routing)
+
+    /// Accessory apps get no default main menu, so ⌘A/⌘C/⌘V/⌘Z don't route to the
+    /// first responder. Install a minimal App + Edit menu — the menu bar stays hidden
+    /// for an accessory app, but the standard-selector key equivalents still work in
+    /// our windows (e.g. the settings text fields).
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        // App menu slot — required as the first item even if empty.
+        let appItem = NSMenuItem()
+        appItem.submenu = NSMenu()
+        mainMenu.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let edit = NSMenu(title: "편집")
+        edit.addItem(withTitle: "실행 취소", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = edit.addItem(withTitle: "다시 실행", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "잘라내기", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "복사", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "붙여넣기", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "전체 선택", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        mainMenu.addItem(editItem)
+
+        NSApp.mainMenu = mainMenu
     }
 
     // MARK: - Menu

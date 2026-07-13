@@ -11,7 +11,6 @@ struct SettingsView: View {
 
     @AppStorage("llm.baseURL") private var baseURL = "https://api.openai.com/v1"
     @AppStorage("llm.model") private var model = "gpt-4o-mini"
-    @AppStorage("systemPrompt") private var systemPrompt = ""
     @AppStorage("applyMode") private var applyMode = "preview"
     @AppStorage("panelPosition") private var panelPosition = "caret"
     @AppStorage("includeAppName") private var includeAppName = true
@@ -27,14 +26,37 @@ struct SettingsView: View {
     // Hotkey recorder monitor handle; removed when recording stops or view disappears.
     @State private var monitor: Any?
 
+    // Model fetching.
+    @State private var fetchedModels: [String] = []
+    @State private var fetching = false
+    @State private var fetchError: String?
+
+    // Prompt profiles (loaded/migrated on appear; mirrors active prompt into "systemPrompt").
+    @State private var profiles: [PromptProfile] = []
+    @State private var activeProfile = ""
+
     var body: some View {
         Form {
             Section("LLM") {
                 TextField("Base URL", text: $baseURL)
-                TextField("모델", text: $model)
                 SecureField("API 키", text: $apiKey)
                     .onSubmit { KeychainStore.set(apiKey) }
                     .onChange(of: apiKey) { _, new in KeychainStore.set(new) }
+
+                HStack {
+                    TextField("모델", text: $model)
+                    Button(fetching ? "가져오는 중…" : "모델 가져오기") { fetchModels() }
+                        .disabled(fetching)
+                }
+                if !fetchedModels.isEmpty {
+                    // Text field stays the source of truth; picker just fills it.
+                    Picker("가져온 모델", selection: $model) {
+                        ForEach(fetchedModels, id: \.self) { Text($0).tag($0) }
+                    }
+                }
+                if let fetchError {
+                    Text(fetchError).font(.caption).foregroundStyle(.red)
+                }
             }
 
             Section("동작") {
@@ -60,7 +82,17 @@ struct SettingsView: View {
             }
 
             Section("시스템 프롬프트") {
-                TextEditor(text: $systemPrompt)
+                HStack {
+                    Picker("프로필", selection: $activeProfile) {
+                        ForEach(profiles) { Text($0.name).tag($0.name) }
+                    }
+                    .onChange(of: activeProfile) { _, _ in mirrorActivePrompt() }
+                    Button("추가") { addProfile() }
+                    Button("이름변경") { renameProfile() }
+                    Button("삭제") { deleteProfile() }
+                        .disabled(profiles.count <= 1)
+                }
+                TextEditor(text: activePromptBinding)
                     .frame(minHeight: 80)
                     .font(.body)
             }
@@ -83,8 +115,121 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 420, height: 620)
-        .onAppear { apiKey = KeychainStore.get() ?? "" }
+        .onAppear {
+            apiKey = KeychainStore.get() ?? ""
+            loadProfiles()
+        }
         .onDisappear { stopRecording() }
+    }
+
+    // MARK: - Model fetching
+
+    private func fetchModels() {
+        fetching = true
+        fetchError = nil
+        // Reads baseURL/API key from defaults+Keychain, which SettingsView already persisted.
+        Task {
+            do {
+                let models = try await LLMClient().fetchModels()
+                fetchedModels = models
+                if models.isEmpty { fetchError = "모델 목록이 비어 있습니다." }
+            } catch {
+                fetchError = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            }
+            fetching = false
+        }
+    }
+
+    // MARK: - Prompt profiles
+
+    /// TextEditor binding into the active profile; every keystroke persists + mirrors.
+    private var activePromptBinding: Binding<String> {
+        Binding(
+            get: { profiles.first { $0.name == activeProfile }?.prompt ?? "" },
+            set: { new in
+                guard let i = profiles.firstIndex(where: { $0.name == activeProfile }) else { return }
+                profiles[i].prompt = new
+                saveProfiles()
+            }
+        )
+    }
+
+    private func loadProfiles() {
+        let d = UserDefaults.standard
+        if let data = d.data(forKey: "promptProfiles"),
+           let decoded = try? JSONDecoder().decode([PromptProfile].self, from: data),
+           !decoded.isEmpty {
+            profiles = decoded
+        } else {
+            // Migrate legacy single systemPrompt into a "기본" profile.
+            profiles = [PromptProfile(name: "기본", prompt: d.string(forKey: "systemPrompt") ?? "")]
+        }
+        if !profiles.contains(where: { $0.name == d.string(forKey: "activeProfile") }) {
+            activeProfile = profiles[0].name
+        } else {
+            activeProfile = d.string(forKey: "activeProfile")!
+        }
+        saveProfiles()
+    }
+
+    /// Persist profiles + active name, and mirror the active prompt into "systemPrompt"
+    /// so ConversationController keeps reading a single key (no change needed there).
+    private func saveProfiles() {
+        let d = UserDefaults.standard
+        d.set(try? JSONEncoder().encode(profiles), forKey: "promptProfiles")
+        d.set(activeProfile, forKey: "activeProfile")
+        mirrorActivePrompt()
+    }
+
+    private func mirrorActivePrompt() {
+        let prompt = profiles.first { $0.name == activeProfile }?.prompt ?? ""
+        UserDefaults.standard.set(prompt, forKey: "systemPrompt")
+        UserDefaults.standard.set(activeProfile, forKey: "activeProfile")
+    }
+
+    private func addProfile() {
+        let name = uniqueName("새 프로필")
+        profiles.append(PromptProfile(name: name, prompt: ""))
+        activeProfile = name
+        saveProfiles()
+    }
+
+    private func renameProfile() {
+        guard let i = profiles.firstIndex(where: { $0.name == activeProfile }) else { return }
+        let new = promptForName(current: profiles[i].name)
+        guard let new, new != profiles[i].name else { return }
+        profiles[i].name = uniqueName(new)
+        activeProfile = profiles[i].name
+        saveProfiles()
+    }
+
+    private func deleteProfile() {
+        guard profiles.count > 1,
+              let i = profiles.firstIndex(where: { $0.name == activeProfile }) else { return }
+        profiles.remove(at: i)
+        activeProfile = profiles[0].name
+        saveProfiles()
+    }
+
+    private func uniqueName(_ base: String) -> String {
+        var name = base
+        var n = 2
+        while profiles.contains(where: { $0.name == name }) { name = "\(base) \(n)"; n += 1 }
+        return name
+    }
+
+    /// Simple modal text prompt — no custom sheet needed for a rename.
+    private func promptForName(current: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = "프로필 이름"
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.stringValue = current
+        alert.accessoryView = field
+        alert.addButton(withTitle: "확인")
+        alert.addButton(withTitle: "취소")
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let trimmed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: - Hotkey recording
@@ -126,6 +271,13 @@ struct SettingsView: View {
     private var hotkeyDisplay: String {
         modifierSymbols(hotkeyModifiers) + keyName(hotkeyKeyCode)
     }
+}
+
+/// A named system-prompt profile. `id` is the name (names are kept unique).
+struct PromptProfile: Codable, Identifiable {
+    var name: String
+    var prompt: String
+    var id: String { name }
 }
 
 // MARK: - Carbon / NSEvent modifier bridging + key names (free functions, no self capture)
