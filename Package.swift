@@ -5,6 +5,16 @@ let package = Package(
     name: "AnywhereLLM",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "AnywhereLLM", path: "Sources/AnywhereLLM")
+        .target(name: "LLMCore", path: "Sources/LLMCore"),
+        .executableTarget(
+            name: "AnywhereLLM",
+            dependencies: ["LLMCore"],
+            path: "Sources/AnywhereLLM"
+        ),
+        .testTarget(
+            name: "LLMCoreTests",
+            dependencies: ["LLMCore"],
+            path: "Tests/LLMCoreTests"
+        ),
     ]
 )
