@@ -27,11 +27,15 @@ extendedKeyUsage = critical,codeSigning
 basicConstraints = critical,CA:false
 EOF
 
-openssl req -x509 -newkey rsa:2048 -days 3650 -nodes \
+# 시스템 openssl(LibreSSL) 고정 — OpenSSL 3.x 기본 p12 포맷은 키체인이 거부함
+OPENSSL=/usr/bin/openssl
+
+$OPENSSL req -x509 -newkey rsa:2048 -days 3650 -nodes \
     -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/ext.cnf"
 
-openssl pkcs12 -export -out "$TMP/cert.p12" \
-    -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -passout pass:temp
+$OPENSSL pkcs12 -export -out "$TMP/cert.p12" \
+    -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -passout pass:temp \
+    -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES
 
 security import "$TMP/cert.p12" \
     -k ~/Library/Keychains/login.keychain-db -P temp -T /usr/bin/codesign
