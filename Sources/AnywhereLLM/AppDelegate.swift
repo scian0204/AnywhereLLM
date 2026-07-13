@@ -48,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }()
 
         if panel.isVisible {
-            panel.orderOut(nil)
+            panel.dismiss() // 진행 중 스트림 취소 포함 — 숨긴 뒤 몰래 완주/삽입 방지
             return
         }
 

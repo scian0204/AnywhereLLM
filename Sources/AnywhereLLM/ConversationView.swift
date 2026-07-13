@@ -29,16 +29,11 @@ struct ConversationView: View {
 
     // MARK: - Insert mode
 
+    // 스트리밍 시작 즉시 패널이 숨으므로 "생성 중" 상태 UI는 그릴 기회가 없다 —
+    // 입력창 + (에러 재표시용) 에러 텍스트만 둔다.
     private var insertMode: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if controller.isStreaming {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("생성 중… (Esc 취소)").font(.callout).foregroundStyle(.secondary)
-                }
-            } else {
-                inputField(placeholder: "무엇이든 물어보세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
-            }
+            inputField(placeholder: "무엇이든 물어보세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
 
             if let error = controller.errorMessage { errorText(error) }
         }

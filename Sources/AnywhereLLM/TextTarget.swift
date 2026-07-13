@@ -167,9 +167,13 @@ enum TextTargetService {
 
     /// Type `text` into the focused element as synthetic Unicode key events —
     /// no clipboard, no AX. Used for streaming insert so chunks land as they arrive.
-    /// The panel is non-activating, so the target app keeps focus and receives these.
+    /// 주의: 합성 키 이벤트는 시스템의 key window로 간다. 패널이 key인 채로 부르면
+    /// 패널이 이벤트를 먹는다 — 호출 전에 패널을 숨겨 대상 앱에 key를 돌려줄 것.
     static func typeText(_ text: String) {
         guard !text.isEmpty else { return }
+        // 하드 룰: 캡처 이후 포커스가 보안 필드로 옮겨졌을 수 있다 — 타이핑 직전 재확인,
+        // 보안 필드면 무조건 드롭 (설정으로 풀 수 없음).
+        if let focused = focusedElement(), isSecureField(focused) { return }
         // ponytail: 20 UTF-16 units/event is a safe chunk; CGEventKeyboardSetUnicodeString
         // truncates very long strings. Bump if a target drops characters.
         let units = Array(text.utf16)

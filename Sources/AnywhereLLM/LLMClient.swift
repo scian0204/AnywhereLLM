@@ -7,13 +7,13 @@ struct ChatMessage: Codable {
 }
 
 enum LLMError: LocalizedError {
-    case missingAPIKey
+    case invalidBaseURL(String)
     case http(status: Int, message: String)
 
     var errorDescription: String? {
         switch self {
-        case .missingAPIKey:
-            return "API 키가 설정되지 않았습니다. 설정에서 키를 입력하세요."
+        case let .invalidBaseURL(url):
+            return "Base URL이 올바르지 않습니다: \(url)"
         case let .http(status, message):
             return "LLM 요청 실패 (HTTP \(status)): \(message)"
         }
@@ -81,10 +81,10 @@ final class LLMClient {
     }
 
     /// GET {baseURL}/models → sorted list of model ids. For the settings "모델 가져오기" button.
+    /// API 키는 선택 — 로컬 서버(Ollama/LM Studio 등)는 키 없이 동작한다.
     func fetchModels() async throws -> [String] {
-        guard let key = KeychainStore.get(), !key.isEmpty else { throw LLMError.missingAPIKey }
-        var request = URLRequest(url: URL(string: baseURL + "/models")!)
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        var request = URLRequest(url: try endpointURL("/models"))
+        addAuthIfPresent(&request)
 
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
@@ -97,13 +97,10 @@ final class LLMClient {
     }
 
     private func buildRequest(messages: [ChatMessage]) throws -> URLRequest {
-        guard let key = KeychainStore.get(), !key.isEmpty else {
-            throw LLMError.missingAPIKey
-        }
-        var request = URLRequest(url: URL(string: baseURL + "/chat/completions")!)
+        var request = URLRequest(url: try endpointURL("/chat/completions"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        addAuthIfPresent(&request)
 
         let body: [String: Any] = [
             "model": model,
@@ -112,6 +109,20 @@ final class LLMClient {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
+    }
+
+    /// 설정의 Base URL(끝 슬래시/공백 허용)과 경로를 합쳐 URL을 만든다.
+    private func endpointURL(_ path: String) throws -> URL {
+        let joined = joinEndpoint(base: baseURL, path: path)
+        guard let url = URL(string: joined) else { throw LLMError.invalidBaseURL(joined) }
+        return url
+    }
+
+    /// 키가 있을 때만 Bearer 헤더 추가 — 키 없는 로컬 서버도 요청 자체는 나간다.
+    private func addAuthIfPresent(_ request: inout URLRequest) {
+        if let key = KeychainStore.get(), !key.isEmpty {
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        }
     }
 
     /// On a non-200, read the body and pull out error.message if present.

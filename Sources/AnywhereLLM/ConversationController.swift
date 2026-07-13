@@ -45,8 +45,13 @@ final class ConversationController: ObservableObject {
     private var streamTask: Task<Void, Never>?
     /// Select mode: close the panel then run insert after a focus-return delay.
     var onApply: ((String) -> Void)?
+    /// Insert mode: hide the panel BEFORE typing starts. 합성 키 이벤트는 key window로
+    /// 라우팅되므로, 패널이 key를 쥔 채로는 타이핑이 대상 앱에 도달하지 않는다.
+    var onStreamingInsertStart: (() -> Void)?
     /// Insert mode: close the panel once live streaming finishes.
     var onStreamingInsertDone: (() -> Void)?
+    /// Insert mode: streaming failed — re-show the (hidden) panel so the error is visible.
+    var onStreamingInsertError: (() -> Void)?
 
     init(context: TargetContext,
          client: LLMClient = LLMClient(),
@@ -82,6 +87,7 @@ final class ConversationController: ObservableObject {
     private func sendInsertTurn(_ input: String) {
         let messages = buildMessages(latestUserInput: input, priorTurns: [])
         isStreaming = true
+        onStreamingInsertStart?()
 
         streamTask = Task { [weak self] in
             guard let self else { return }
@@ -96,8 +102,11 @@ final class ConversationController: ObservableObject {
             }
 
             do {
+                // 패널이 방금 key를 놓았다 — 대상 앱으로 키 포커스가 돌아올 시간을 준다
+                // (선택 모드 apply와 같은 지연). 취소되면 CancellationError로 빠진다.
+                try await Task.sleep(for: .milliseconds(150))
                 for try await chunk in client.streamChat(messages: messages) {
-                    if Task.isCancelled { break }
+                    try Task.checkCancellation()
                     buffer += filter.feed(chunk)
                     // ponytail: 100ms batching keeps event volume sane on fast streams.
                     if ContinuousClock.now - lastFlush >= .milliseconds(100) {
@@ -105,17 +114,25 @@ final class ConversationController: ObservableObject {
                         lastFlush = .now
                     }
                 }
+                // 취소되면 AsyncThrowingStream은 throw 없이 nil-종료로 루프를 빠져나온다 —
+                // 여기서 한 번 더 확인해야 잔여 버퍼가 catch로 넘어가 드롭된다.
+                try Task.checkCancellation()
                 buffer += filter.flush()
                 flush()
             } catch is CancellationError {
-                flush() // keep whatever was already typed
+                // 취소: 이미 타이핑된 건 그대로 두되, 남은 버퍼는 버린다.
+                // (핫키 재입력으로 새 패널이 이미 key일 수 있어 추가 타이핑은 오입력 위험.)
             } catch {
                 flush()
                 errorMessage = (error as? LLMError)?.errorDescription ?? error.localizedDescription
             }
             isStreaming = false
-            // Leave the panel up on error so the message is visible; else close.
-            if errorMessage == nil { onStreamingInsertDone?() }
+            // Success: close. Error: re-show the hidden panel so the message is visible.
+            if errorMessage == nil {
+                onStreamingInsertDone?()
+            } else {
+                onStreamingInsertError?()
+            }
         }
     }
 
@@ -159,7 +176,8 @@ final class ConversationController: ObservableObject {
 
     private func finishSelectStreaming(assistantIndex: Int) {
         isStreaming = false
-        guard errorMessage == nil, assistantIndex < transcript.count else { return }
+        // 취소된 세션(핫키 재입력/Esc)은 부분 결과를 절대 적용하지 않는다.
+        guard !Task.isCancelled, errorMessage == nil, assistantIndex < transcript.count else { return }
         let result = transcript[assistantIndex].text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { return }
 
