@@ -7,6 +7,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var accessibilityTimer: Timer?
     private var hasAccessibility = false
 
+    private var hotkeyManager: HotkeyManager?
+    private var promptPanel: PromptPanel?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = NSImage(
@@ -17,10 +20,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestAccessibility(prompt: true)
         rebuildMenu()
 
+        let hotkey = HotkeyManager { [weak self] in self?.togglePanel() }
+        hotkey.start()
+        hotkeyManager = hotkey
+
         // ponytail: 5s poll instead of AX notification observer; simplest way to refresh grant state
         accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshAccessibility() }
         }
+    }
+
+    // MARK: - Prompt panel
+
+    /// Toggle the non-activating panel: show + position + focus, or hide if already visible.
+    private func togglePanel() {
+        let panel = promptPanel ?? {
+            let p = PromptPanel()
+            promptPanel = p
+            return p
+        }()
+
+        if panel.isVisible {
+            panel.orderOut(nil)
+            return
+        }
+
+        // Position must be computed against the CURRENT focus, before we show the panel.
+        panel.setFrameOrigin(PanelPositioner.origin(for: panel.frame.size))
+        // orderFrontRegardless shows without activating the app.
+        panel.orderFrontRegardless()
+        panel.makeKey()
+        panel.focusInput()
     }
 
     // MARK: - Accessibility
