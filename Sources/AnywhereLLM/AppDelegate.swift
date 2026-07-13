@@ -45,12 +45,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Capture the target BEFORE showing the panel — focus changes once the panel appears.
+        let context = TextTargetService.captureContext()
+
+        // Hard rule: never operate on a secure field. Warn lightly, don't show the panel.
+        if context.isSecureField {
+            warnSecureField()
+            return
+        }
+
+        panel.present(context: context)
         // Position must be computed against the CURRENT focus, before we show the panel.
         panel.setFrameOrigin(PanelPositioner.origin(for: panel.frame.size))
         // orderFrontRegardless shows without activating the app.
         panel.orderFrontRegardless()
         panel.makeKey()
         panel.focusInput()
+    }
+
+    /// Light feedback when the focused field is secure: beep + briefly flash the menu bar icon.
+    private func warnSecureField() {
+        NSSound.beep()
+        let button = statusItem.button
+        let original = button?.image
+        button?.image = NSImage(systemSymbolName: "lock.slash",
+                                accessibilityDescription: "보안 필드 차단됨")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            button?.image = original
+        }
     }
 
     // MARK: - Accessibility
