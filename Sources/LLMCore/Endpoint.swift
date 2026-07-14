@@ -8,3 +8,12 @@ public func joinEndpoint(base: String, path: String) -> String {
     let p = path.hasPrefix("/") ? path : "/" + path
     return b + p
 }
+
+/// Base URL 문자열에서 scheme://host[:port] origin만 추출 (경로 제거). 실패 시 nil.
+/// Ollama 네이티브 API(/api/*)는 /v1 경로 없이 origin에 붙는다.
+public func endpointOrigin(_ base: String) -> String? {
+    guard let url = URL(string: base.trimmingCharacters(in: .whitespacesAndNewlines)),
+          let scheme = url.scheme, let host = url.host else { return nil }
+    let port = url.port.map { ":\($0)" } ?? ""
+    return "\(scheme)://\(host)\(port)"
+}

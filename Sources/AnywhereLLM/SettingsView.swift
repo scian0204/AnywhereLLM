@@ -61,7 +61,7 @@ struct SettingsView: View {
 
                 Toggle("생각(think) 모드 끄기", isOn: $disableThink)
                 if disableThink {
-                    Text("Qwen3.5/Gemma 4 등 reasoning 모델의 생각 과정을 요청 단계에서 끕니다. 미지원 서버(OpenAI 등)에서 오류가 나면 끄세요. <think> 출력 필터는 항상 동작합니다.")
+                    Text("Qwen3.5/Gemma 4 등 reasoning 모델의 생각 과정을 요청 단계에서 끕니다. Ollama는 네이티브 API로 자동 전환해 완전 차단합니다. 미지원 서버(OpenAI 등)에서 오류가 나면 끄세요. <think> 출력 필터는 항상 동작합니다.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
