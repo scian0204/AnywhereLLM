@@ -32,6 +32,8 @@ enum TextTargetService {
             // 포커스 요소 없음 (AX 미노출 네이티브 — 카카오톡류). 앱 어딘가의 선택은
             // ⌘C로만 잡을 수 있다 — 나오면 위치를 모르는 선택 = 보기 전용.
             if let copied = clipboardCopyFallback(timeout: 0.15), !copied.isEmpty {
+                NSLog("AnywhereLLM capture: app=%@ no focused element → ⌘C hit (len %d) → view-only",
+                      bundleId ?? "nil", copied.count)
                 return TargetContext(appName: appName, bundleId: bundleId,
                                      selectedText: copied, fullText: nil,
                                      isSecureField: false, isEditable: false,
@@ -39,6 +41,8 @@ enum TextTargetService {
             }
             // 불명 = 편집 가능: CGEvent 타이핑 쓰기는 AX가 불필요해 기존 흐름이
             // 그대로 동작한다. false로 두면 그 앱들의 삽입이 전면 회귀한다.
+            NSLog("AnywhereLLM capture: app=%@ no focused element, ⌘C empty → editable insert",
+                  bundleId ?? "nil")
             return TargetContext(appName: appName, bundleId: bundleId,
                                  selectedText: nil, fullText: nil,
                                  isSecureField: false, isEditable: true, axElement: nil)
@@ -54,12 +58,18 @@ enum TextTargetService {
 
         var selected = stringAttribute(element, kAXSelectedTextAttribute as CFString)
         let full = stringAttribute(element, kAXValueAttribute as CFString)
+        NSLog("AnywhereLLM capture: app=%@ role=%@ selLen=%d rangeLen=%d fullLen=%@",
+              bundleId ?? "nil",
+              stringAttribute(element, kAXRoleAttribute as CFString) ?? "nil",
+              selected?.count ?? -1, selectedRangeLength(element),
+              full.map { String($0.count) } ?? "nil")
 
         if selected == nil || selected?.isEmpty == true {
             if selectedRangeLength(element) > 0 {
                 // 요소 안에 선택은 있는데 selectedText 속성이 비는 앱
                 // (웹뷰/Electron 일부) → ⌘C 클립보드 폴백.
                 selected = clipboardCopyFallback()
+                NSLog("AnywhereLLM capture: range>0 → ⌘C (len %d)", selected?.count ?? -1)
             } else if let webArea = webAreaAncestor(of: element) {
                 // 웹 계열: 문서 선택은 웹 영역이 권위. Slack류 메신저는 채팅
                 // 텍스트를 선택해도 컴포저가 포커스를 쥔다 (실측: progress/20) —
@@ -67,8 +77,10 @@ enum TextTargetService {
                 // axElement는 웹 영역: 패널 앵커(선택 위치 텍스트마커 bounds)용.
                 // 웹 영역이 "선택 없음"이면 그대로 믿는다 — 여기서 ⌘C를 쏘면
                 // 줄 복사 에디터(VS Code 등)의 빈 선택 오탐이 부활한다.
-                if let webSelection = stringAttribute(webArea, kAXSelectedTextAttribute as CFString),
-                   !webSelection.isEmpty {
+                let webSelection = stringAttribute(webArea, kAXSelectedTextAttribute as CFString)
+                NSLog("AnywhereLLM capture: webArea found, webSelLen=%@",
+                      webSelection.map { String($0.count) } ?? "nil")
+                if let webSelection, !webSelection.isEmpty {
                     return TargetContext(appName: appName, bundleId: bundleId,
                                          selectedText: webSelection, fullText: nil,
                                          isSecureField: false, isEditable: false,
@@ -78,23 +90,31 @@ enum TextTargetService {
                 // AX가 아예 침묵(full도 없음)하는 앱 → ⌘C 폴백, 요소 소속 선택으로
                 // 간주 (레거시 — 이런 앱은 요소 상태를 알 길이 없다).
                 selected = clipboardCopyFallback()
+                NSLog("AnywhereLLM capture: AX silent → ⌘C (len %d)", selected?.count ?? -1)
             } else if let copied = clipboardCopyFallback(timeout: 0.15), !copied.isEmpty,
                       full?.contains(copied) != true {
                 // 네이티브: 요소는 "선택 없음"(범위 0)이라는데 ⌘C로 텍스트가 나왔고
                 // 요소 자기 내용의 일부도 아님(빈 선택에 현재 줄을 복사하는 에디터
                 // 오탐 배제) → 앱 내 다른 곳의 선택 = 보기 전용. 위치를 모르므로
                 // 앵커는 nil(마우스 폴백 — 선택 직후라 선택 근처).
+                NSLog("AnywhereLLM capture: native speculative ⌘C hit (len %d) → view-only", copied.count)
                 return TargetContext(appName: appName, bundleId: bundleId,
                                      selectedText: copied, fullText: nil,
                                      isSecureField: false, isEditable: false,
                                      axElement: nil)
+            } else {
+                NSLog("AnywhereLLM capture: native, speculative ⌘C empty/phantom → insert context")
             }
         }
 
+        let editable = isEditableElement(element, hasSelection: selected?.isEmpty == false)
+        logElementDiagnostics(element)
+        NSLog("AnywhereLLM capture: default return editable=%d selPresent=%d",
+              editable ? 1 : 0, (selected?.isEmpty == false) ? 1 : 0)
         return TargetContext(appName: appName, bundleId: bundleId,
                              selectedText: (selected?.isEmpty == true) ? nil : selected,
                              fullText: (full?.isEmpty == true) ? nil : full,
-                             isSecureField: false, isEditable: isEditableElement(element),
+                             isSecureField: false, isEditable: editable,
                              axElement: element)
     }
 
@@ -176,15 +196,25 @@ enum TextTargetService {
     /// "확실히 편집 불가"(콘텐츠 표시 전용 role + settable 아님)일 때만 false,
     /// 불명·AX 오류는 전부 true. settable 검사를 role보다 먼저 해 contenteditable
     /// AXWebArea(웹 리치 에디터)가 거부 목록에 걸리지 않게 한다.
-    private static func isEditableElement(_ element: AXUIElement) -> Bool {
+    ///
+    /// 예외 — `hasSelection`: 읽기 전용 메시지 뷰(Slack 메시지 AXGroup, 카카오톡
+    /// 버블 AXTextArea — 실측 progress/22)도 포커스를 갖고 선택을 직접 들고 있다.
+    /// 요소가 선택을 들고 있는데 value·selectedText 둘 다 "확정적으로"(.success +
+    /// false) 쓰기 불가면 읽기 전용 뷰 = false. 편집 필드는 전부 settable YES를
+    /// 반환하므로(카카오톡 입력칸·Slack 컴포저 실측) 교체 흐름 회귀 없음.
+    /// AX 오류·불명은 여전히 true (기본 방향 유지).
+    private static func isEditableElement(_ element: AXUIElement, hasSelection: Bool) -> Bool {
         var settable = DarwinBoolean(false)
-        if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success,
-           settable.boolValue {
+        let valueErr = AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable)
+        if valueErr == .success, settable.boolValue {
             return true
         }
-        if AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
-           settable.boolValue {
+        let selTextErr = AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable)
+        if selTextErr == .success, settable.boolValue {
             return true
+        }
+        if hasSelection, valueErr == .success, selTextErr == .success {
+            return false
         }
         // 콘텐츠 표시 전용 role — 웹 본문/정적 텍스트/이미지/PDF 스크롤 영역/목록류.
         let viewOnlyRoles: Set<String> = [
@@ -202,6 +232,38 @@ enum TextTargetService {
             return false
         }
         return true
+    }
+
+    /// 캡처 진단 로그: 편집 가능성 판정 신호 덤프 (통합 로그, 텍스트 내용 무기록).
+    /// GUI 동작은 자동 검증이 불가능해 미지의 앱에서 오판이 나오면 이 로그가 유일한
+    /// 단서다 — `log show --predicate 'process == "AnywhereLLM"'` (실측: progress/22).
+    private static func logElementDiagnostics(_ element: AXUIElement) {
+        func settableStr(_ attr: CFString) -> String {
+            var s = DarwinBoolean(false)
+            let err = AXUIElementIsAttributeSettable(element, attr, &s)
+            return err == .success ? (s.boolValue ? "YES" : "no") : "err\(err.rawValue)"
+        }
+        var names: CFArray?
+        var extras = "-"
+        if AXUIElementCopyAttributeNames(element, &names) == .success, let list = names as? [String] {
+            let hits = list.filter { $0.contains("Edit") || $0 == "AXEnabled" || $0.contains("Focus") }
+            if !hits.isEmpty { extras = hits.joined(separator: ",") }
+        }
+        var chain: [String] = []
+        var current = element
+        for _ in 0..<6 {
+            var parent: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parent) == .success,
+                  let parent else { break }
+            current = parent as! AXUIElement
+            chain.append(stringAttribute(current, kAXRoleAttribute as CFString) ?? "?")
+        }
+        NSLog("AnywhereLLM diag: subrole=%@ settable(value=%@ selText=%@ selRange=%@) attrs=%@ parents=%@",
+              stringAttribute(element, kAXSubroleAttribute as CFString) ?? "-",
+              settableStr(kAXValueAttribute as CFString),
+              settableStr(kAXSelectedTextAttribute as CFString),
+              settableStr(kAXSelectedTextRangeAttribute as CFString),
+              extras, chain.joined(separator: ">"))
     }
 
     /// 조상 중 웹 영역(AXWebArea). 웹 계열 앱은 포커스가 입력칸에 있어도 문서
