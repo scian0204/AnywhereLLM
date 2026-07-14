@@ -2,11 +2,11 @@ import SwiftUI
 
 /// The panel UI. Two layouts:
 ///
-/// - **Insert mode** (no selection): just the input box. On send, the reply
-///   streams straight into the target text box; the panel shows a "생성 중…" state
-///   and closes when done.
-/// - **Select mode** (selection present): selection preview + transcript +
-///   input + a preview/replace confirm button, with multi-turn.
+/// - **Insert mode** (no selection + immediate): input box + 로딩. 첫 토큰이
+///   도착하면 패널이 숨고 응답이 대상 텍스트박스에 직접 타이핑된다.
+/// - **Select mode** (selection present, or preview): selection preview +
+///   마지막 응답 결과 블록(대화 버블 없음) + input + 확정 버튼. multi-turn은
+///   히스토리로만 유지되고 화면엔 최신 결과만 보인다.
 ///
 /// ⏎ sends, ⇧⏎ newlines, ⌘⏎ confirms a pending replacement, Esc closes.
 struct ConversationView: View {
@@ -29,11 +29,13 @@ struct ConversationView: View {
 
     // MARK: - Insert mode
 
-    // 스트리밍 시작 즉시 패널이 숨으므로 "생성 중" 상태 UI는 그릴 기회가 없다 —
-    // 입력창 + (에러 재표시용) 에러 텍스트만 둔다.
+    // 첫 가시 토큰이 도착할 때까지 패널이 떠 있으므로 로딩 상태를 보여준다.
+    // 토큰 도착 직전에 패널이 숨고 대상 텍스트박스 타이핑이 시작된다.
     private var insertMode: some View {
         VStack(alignment: .leading, spacing: 8) {
             inputField(placeholder: "무엇이든 물어보세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
+
+            if controller.isStreaming { loadingRow }
 
             if let error = controller.errorMessage { errorText(error) }
         }
@@ -47,8 +49,9 @@ struct ConversationView: View {
                 selectionPreview(selection)
             }
 
-            if !controller.transcript.isEmpty {
-                transcriptScroll
+            if let result = controller.latestAssistantText,
+               controller.isStreaming || !result.isEmpty {
+                resultView(result)
             }
 
             if let error = controller.errorMessage { errorText(error) }
@@ -96,39 +99,30 @@ struct ConversationView: View {
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
     }
 
-    private var transcriptScroll: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(controller.transcript) { entry in
-                        bubble(entry)
-                            .frame(maxWidth: .infinity,
-                                   alignment: entry.role == .user ? .trailing : .leading)
-                            .id(entry.id)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-            .frame(maxHeight: 280)
-            .onChange(of: controller.transcript.last?.text) {
-                if let last = controller.transcript.last {
-                    withAnimation(.easeOut(duration: 0.1)) { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
-            }
+    private var loadingRow: some View {
+        HStack(spacing: 6) {
+            ProgressView().controlSize(.small)
+            Text("생성 중…").font(.callout).foregroundStyle(.secondary)
         }
     }
 
-    private func bubble(_ entry: TranscriptEntry) -> some View {
-        Text(entry.text.isEmpty && controller.isStreaming ? "…" : entry.text)
-            .font(.callout)
-            .textSelection(.enabled)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                entry.role == .user ? AnyShapeStyle(.tint.opacity(0.15))
-                                    : AnyShapeStyle(.quaternary),
-                in: RoundedRectangle(cornerRadius: 8)
-            )
+    /// 결과 미리보기 — 대화 버블 대신 마지막 assistant 응답만 평문 블록으로 표시.
+    private func resultView(_ text: String) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                Text(text.isEmpty ? "…" : text)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Color.clear.frame(height: 1).id("resultBottom")
+            }
+            .frame(maxHeight: 280)
+            .onChange(of: text) {
+                proxy.scrollTo("resultBottom", anchor: .bottom)
+            }
+        }
+        .padding(8)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
     }
 
     private var applyButton: some View {

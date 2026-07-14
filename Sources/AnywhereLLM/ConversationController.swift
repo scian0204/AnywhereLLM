@@ -35,6 +35,12 @@ final class ConversationController: ObservableObject {
     /// Select mode: the completed reply awaiting insert confirmation (preview).
     @Published var pendingResult: String?
 
+    /// Transcript UX의 결과 표시용 — 마지막 assistant 응답만 노출.
+    /// 대화 버블 대신 결과 단건 표기 (multi-turn 히스토리는 내부적으로 유지).
+    var latestAssistantText: String? {
+        transcript.last(where: { $0.role == .assistant })?.text
+    }
+
     let context: TargetContext
     /// True when there was a selection to replace (select mode), false for insert mode.
     var hasSelection: Bool { (context.selectedText?.isEmpty == false) }
@@ -90,13 +96,23 @@ final class ConversationController: ObservableObject {
     private func sendInsertTurn(_ input: String) {
         let messages = buildMessages(latestUserInput: input, priorTurns: [])
         isStreaming = true
-        onStreamingInsertStart?()
 
         streamTask = Task { [weak self] in
             guard let self else { return }
             var filter = ThinkTagFilter()
             var buffer = ""
             var lastFlush = ContinuousClock.now
+            var typingStarted = false
+
+            // 첫 가시 콘텐츠가 나올 때까지 패널을 띄워 로딩을 보여주고, 타이핑 직전에야
+            // 숨긴다. 숨긴 뒤 대상 앱으로 key 포커스가 돌아올 시간을 준다
+            // (선택 모드 apply와 같은 지연). 취소되면 CancellationError로 빠진다.
+            @MainActor func beginTypingIfNeeded() async throws {
+                guard !typingStarted else { return }
+                typingStarted = true
+                onStreamingInsertStart?()
+                try await Task.sleep(for: .milliseconds(150))
+            }
 
             func flush() {
                 guard !buffer.isEmpty else { return }
@@ -105,12 +121,11 @@ final class ConversationController: ObservableObject {
             }
 
             do {
-                // 패널이 방금 key를 놓았다 — 대상 앱으로 키 포커스가 돌아올 시간을 준다
-                // (선택 모드 apply와 같은 지연). 취소되면 CancellationError로 빠진다.
-                try await Task.sleep(for: .milliseconds(150))
                 for try await chunk in client.streamChat(messages: messages) {
                     try Task.checkCancellation()
                     buffer += filter.feed(chunk)
+                    guard !buffer.isEmpty else { continue }
+                    try await beginTypingIfNeeded()
                     // ponytail: 100ms batching keeps event volume sane on fast streams.
                     if ContinuousClock.now - lastFlush >= .milliseconds(100) {
                         flush()
@@ -121,12 +136,14 @@ final class ConversationController: ObservableObject {
                 // 여기서 한 번 더 확인해야 잔여 버퍼가 catch로 넘어가 드롭된다.
                 try Task.checkCancellation()
                 buffer += filter.flush()
+                if !buffer.isEmpty { try await beginTypingIfNeeded() }
                 flush()
             } catch is CancellationError {
                 // 취소: 이미 타이핑된 건 그대로 두되, 남은 버퍼는 버린다.
                 // (핫키 재입력으로 새 패널이 이미 key일 수 있어 추가 타이핑은 오입력 위험.)
             } catch {
-                flush()
+                // 타이핑 전 에러면 패널이 아직 key — 여기서 flush하면 패널이 이벤트를 먹는다.
+                if typingStarted { flush() }
                 errorMessage = (error as? LLMError)?.errorDescription ?? error.localizedDescription
             }
             isStreaming = false
