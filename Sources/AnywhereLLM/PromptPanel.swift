@@ -104,9 +104,27 @@ final class PromptPanel: NSPanel {
         }
         self.controller = controller
 
-        let host = NSHostingView(rootView: ConversationView(controller: controller))
-        host.sizingOptions = [.preferredContentSize] // panel resizes to SwiftUI's fitting size
+        // sizingOptions만으로는 창이 안 자란다 — contentViewController가 없는 창에서
+        // .preferredContentSize는 무효. SwiftUI가 측정한 콘텐츠 크기를 받아 직접 리사이즈.
+        let host = NSHostingView(rootView: ConversationView(
+            controller: controller,
+            onContentSizeChange: { [weak self] size in self?.resizeToFit(contentSize: size) }
+        ))
         contentView = host
+    }
+
+    /// SwiftUI 콘텐츠 크기에 창을 맞춘다. 좌상단 앵커 고정(아래로 성장) + 화면 클램프.
+    private func resizeToFit(contentSize: CGSize) {
+        guard contentSize.width > 0, contentSize.height > 0 else { return }
+        let target = frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
+        guard target != frame.size else { return }
+        let topLeft = anchoredTopLeft ?? NSPoint(x: frame.minX, y: frame.maxY)
+        var origin = NSPoint(x: topLeft.x, y: topLeft.y - target.height)
+        if let bounds = (screen ?? NSScreen.main)?.visibleFrame {
+            origin.x = min(max(origin.x, bounds.minX), max(bounds.minX, bounds.maxX - target.width))
+            origin.y = min(max(origin.y, bounds.minY), max(bounds.minY, bounds.maxY - target.height))
+        }
+        setFrame(NSRect(origin: origin, size: target), display: true)
     }
 
     /// Focus is handled by SwiftUI (.onAppear + @FocusState); makeKey suffices here.

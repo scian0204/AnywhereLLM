@@ -18,6 +18,20 @@ NSWindow의 origin은 **좌하단**이라, 결과 스트리밍으로 NSHostingVi
   화면 `visibleFrame` 밖이면 안으로 클램프.
 - `didMoveNotification` → 드래그로 옮기면 앵커 갱신 (리사이즈 시 원위치 방지).
 
+**1차 수정 실패 — 진짜 근본 원인 (사용자 재보고 "1번은 그대로"):**
+`host.sizingOptions = [.preferredContentSize]`는 **contentViewController가 있는
+창에서만 동작** — 이 패널은 `contentView` 직접 할당이라 창이 스트리밍 중
+**아예 리사이즈되지 않았다**. didResize가 안 울리니 위 앵커 로직도 발동 무.
+결과는 고정된 작은 창 안에서 ScrollView가 짓눌리고, 하단 자동 스크롤이
+내용을 위로 밀어냄 — "위로 올라가 안보임" 증상과 일치.
+
+최종 수정:
+- `ConversationView`: GeometryReader + PreferenceKey로 콘텐츠 크기 측정 →
+  `onContentSizeChange` 콜백 (onPreferenceChange는 @Sendable — Task로 메인 액터 홉).
+- `PromptPanel.resizeToFit(contentSize:)`: `frameRect(forContentRect:)`로 창 크기
+  환산 후 좌상단 앵커 유지하며 `setFrame` — 아래로 성장 + visibleFrame 클램프.
+- sizingOptions 의존 제거. 기존 didResize/didMove 앵커 옵저버는 안전망으로 유지.
+
 ## 2. 미리보기 확정 삽입 실패
 
 `apply()`가 쓰던 `TextTargetService.insert` = AX `setSelectedText`
