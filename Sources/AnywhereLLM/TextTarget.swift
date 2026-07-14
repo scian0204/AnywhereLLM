@@ -29,6 +29,14 @@ enum TextTargetService {
         let bundleId = app?.bundleIdentifier
 
         guard let element = focusedElement(wakeIfNeeded: true) else {
+            // 포커스 요소 없음 (AX 미노출 네이티브 — 카카오톡류). 앱 어딘가의 선택은
+            // ⌘C로만 잡을 수 있다 — 나오면 위치를 모르는 선택 = 보기 전용.
+            if let copied = clipboardCopyFallback(timeout: 0.15), !copied.isEmpty {
+                return TargetContext(appName: appName, bundleId: bundleId,
+                                     selectedText: copied, fullText: nil,
+                                     isSecureField: false, isEditable: false,
+                                     axElement: nil)
+            }
             // 불명 = 편집 가능: CGEvent 타이핑 쓰기는 AX가 불필요해 기존 흐름이
             // 그대로 동작한다. false로 두면 그 앱들의 삽입이 전면 회귀한다.
             return TargetContext(appName: appName, bundleId: bundleId,
@@ -52,23 +60,34 @@ enum TextTargetService {
                 // 요소 안에 선택은 있는데 selectedText 속성이 비는 앱
                 // (웹뷰/Electron 일부) → ⌘C 클립보드 폴백.
                 selected = clipboardCopyFallback()
-            } else if let webArea = webAreaAncestor(of: element),
-                      let webSelection = stringAttribute(webArea, kAXSelectedTextAttribute as CFString),
-                      !webSelection.isEmpty {
-                // 포커스 요소(입력칸)엔 선택이 없는데 문서 선택이 딴 곳에 있다 —
-                // Slack류 메신저는 채팅 텍스트를 선택해도 컴포저가 포커스를 쥔다
-                // (실측: docs/progress/20). 선택이 포커스 요소 밖 = 삽입 대상 아님
-                // → 보기 전용 컨텍스트. axElement는 웹 영역 — 패널 앵커(선택 위치
-                // 텍스트마커 bounds)용이며, 보기 전용이라 쓰기 경로엔 안 쓰인다.
-                return TargetContext(appName: appName, bundleId: bundleId,
-                                     selectedText: webSelection, fullText: nil,
-                                     isSecureField: false, isEditable: false,
-                                     axElement: webArea)
-            } else if full == nil || full?.isEmpty == true {
-                // AX가 아예 침묵(full도 없음)하거나 빈 요소 → ⌘C 클립보드 폴백.
-                // 범위가 0이고 full이 차 있으면 진짜 선택 없음 — 폴백하지 않는다
-                // (⌘C가 줄 전체를 복사하는 에디터에서 오탐 방지).
+            } else if let webArea = webAreaAncestor(of: element) {
+                // 웹 계열: 문서 선택은 웹 영역이 권위. Slack류 메신저는 채팅
+                // 텍스트를 선택해도 컴포저가 포커스를 쥔다 (실측: progress/20) —
+                // 선택이 포커스 요소 밖 = 삽입 대상 아님 → 보기 전용 컨텍스트.
+                // axElement는 웹 영역: 패널 앵커(선택 위치 텍스트마커 bounds)용.
+                // 웹 영역이 "선택 없음"이면 그대로 믿는다 — 여기서 ⌘C를 쏘면
+                // 줄 복사 에디터(VS Code 등)의 빈 선택 오탐이 부활한다.
+                if let webSelection = stringAttribute(webArea, kAXSelectedTextAttribute as CFString),
+                   !webSelection.isEmpty {
+                    return TargetContext(appName: appName, bundleId: bundleId,
+                                         selectedText: webSelection, fullText: nil,
+                                         isSecureField: false, isEditable: false,
+                                         axElement: webArea)
+                }
+            } else if full == nil {
+                // AX가 아예 침묵(full도 없음)하는 앱 → ⌘C 폴백, 요소 소속 선택으로
+                // 간주 (레거시 — 이런 앱은 요소 상태를 알 길이 없다).
                 selected = clipboardCopyFallback()
+            } else if let copied = clipboardCopyFallback(timeout: 0.15), !copied.isEmpty,
+                      full?.contains(copied) != true {
+                // 네이티브: 요소는 "선택 없음"(범위 0)이라는데 ⌘C로 텍스트가 나왔고
+                // 요소 자기 내용의 일부도 아님(빈 선택에 현재 줄을 복사하는 에디터
+                // 오탐 배제) → 앱 내 다른 곳의 선택 = 보기 전용. 위치를 모르므로
+                // 앵커는 nil(마우스 폴백 — 선택 직후라 선택 근처).
+                return TargetContext(appName: appName, bundleId: bundleId,
+                                     selectedText: copied, fullText: nil,
+                                     isSecureField: false, isEditable: false,
+                                     axElement: nil)
             }
         }
 
@@ -235,15 +254,16 @@ enum TextTargetService {
 
     /// Backs up the pasteboard, injects ⌘C, polls for a changeCount bump, reads
     /// the copied string, then restores the original pasteboard. Returns nil if
-    /// nothing was copied within the timeout.
-    private static func clipboardCopyFallback() -> String? {
+    /// nothing was copied within the timeout. 투기적 프로브(선택이 없을 확률이
+    /// 높은 경로)는 짧은 timeout으로 핫키 지연을 줄인다.
+    private static func clipboardCopyFallback(timeout: TimeInterval = 0.3) -> String? {
         let pb = NSPasteboard.general
         let backup = backupPasteboard(pb)
         let before = pb.changeCount
 
         sendKey(0x08, command: true) // 'c'
 
-        let copied = waitForChange(pb, from: before, timeout: 0.3) ? pb.string(forType: .string) : nil
+        let copied = waitForChange(pb, from: before, timeout: timeout) ? pb.string(forType: .string) : nil
 
         restorePasteboard(pb, items: backup)
         return copied
