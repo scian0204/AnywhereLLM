@@ -163,36 +163,21 @@ struct SettingsView: View {
     }
 
     private func loadProfiles() {
-        let d = UserDefaults.standard
-        if let data = d.data(forKey: "promptProfiles"),
-           let decoded = try? JSONDecoder().decode([PromptProfile].self, from: data),
-           !decoded.isEmpty {
-            profiles = decoded
-        } else {
-            // Migrate legacy single systemPrompt into a "기본" profile.
-            profiles = [PromptProfile(name: "기본", prompt: d.string(forKey: "systemPrompt") ?? "")]
-        }
-        if !profiles.contains(where: { $0.name == d.string(forKey: "activeProfile") }) {
-            activeProfile = profiles[0].name
-        } else {
-            activeProfile = d.string(forKey: "activeProfile")!
-        }
+        profiles = PromptProfile.loadAll()
+        activeProfile = PromptProfile.activeName(in: profiles)
         saveProfiles()
     }
 
     /// Persist profiles + active name, and mirror the active prompt into "systemPrompt"
     /// so ConversationController keeps reading a single key (no change needed there).
     private func saveProfiles() {
-        let d = UserDefaults.standard
-        d.set(try? JSONEncoder().encode(profiles), forKey: "promptProfiles")
-        d.set(activeProfile, forKey: "activeProfile")
+        UserDefaults.standard.set(try? JSONEncoder().encode(profiles),
+                                  forKey: PromptProfile.profilesKey)
         mirrorActivePrompt()
     }
 
     private func mirrorActivePrompt() {
-        let prompt = profiles.first { $0.name == activeProfile }?.prompt ?? ""
-        UserDefaults.standard.set(prompt, forKey: "systemPrompt")
-        UserDefaults.standard.set(activeProfile, forKey: "activeProfile")
+        PromptProfile.setActive(activeProfile, in: profiles)
     }
 
     private func addProfile() {
@@ -286,6 +271,38 @@ struct PromptProfile: Codable, Identifiable {
     var name: String
     var prompt: String
     var id: String { name }
+}
+
+/// 프로필 저장소 헬퍼 — SettingsView와 패널(ConversationView 드롭다운)이 공유.
+extension PromptProfile {
+    static let profilesKey = "promptProfiles"
+    static let activeKey = "activeProfile"
+    /// ConversationController가 읽는 단일 키 (값은 ConversationController.systemPromptKey와 동일 —
+    /// 그쪽은 @MainActor 격리라 비격리 컨텍스트에서 참조 불가, 리터럴 유지).
+    static let mirrorKey = "systemPrompt"
+
+    /// 저장된 프로필 로드. 없으면 레거시 단일 systemPrompt를 "기본" 프로필로 취급.
+    static func loadAll(_ d: UserDefaults = .standard) -> [PromptProfile] {
+        if let data = d.data(forKey: profilesKey),
+           let decoded = try? JSONDecoder().decode([PromptProfile].self, from: data),
+           !decoded.isEmpty {
+            return decoded
+        }
+        return [PromptProfile(name: "기본", prompt: d.string(forKey: mirrorKey) ?? "")]
+    }
+
+    /// 저장된 활성 이름이 목록에 있으면 그것, 아니면 첫 프로필.
+    static func activeName(in profiles: [PromptProfile], _ d: UserDefaults = .standard) -> String {
+        guard let stored = d.string(forKey: activeKey),
+              profiles.contains(where: { $0.name == stored }) else { return profiles[0].name }
+        return stored
+    }
+
+    /// 활성 이름 저장 + 해당 프롬프트를 systemPrompt로 미러 — 소비측은 프로필 개념을 모른다.
+    static func setActive(_ name: String, in profiles: [PromptProfile], _ d: UserDefaults = .standard) {
+        d.set(name, forKey: activeKey)
+        d.set(profiles.first { $0.name == name }?.prompt ?? "", forKey: mirrorKey)
+    }
 }
 
 // MARK: - Carbon / NSEvent modifier bridging + key names (free functions, no self capture)

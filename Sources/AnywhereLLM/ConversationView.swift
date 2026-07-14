@@ -14,9 +14,12 @@ struct ConversationView: View {
     @ObservedObject var controller: ConversationController
     @State private var input = ""
     @FocusState private var inputFocused: Bool
+    @State private var profiles: [PromptProfile] = []
+    @State private var activeProfile = ""
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 8) {
+            profileRow
             if controller.showsTranscriptUI {
                 selectMode
             } else {
@@ -30,7 +33,31 @@ struct ConversationView: View {
         // 아래로 성장 — 실측: docs/progress/16). 수동 리사이즈 금지: autolayout과
         // 싸우면 무한 진동(깜빡임)한다.
         .fixedSize(horizontal: false, vertical: true)
-        .onAppear { inputFocused = true }
+        .onAppear {
+            profiles = PromptProfile.loadAll()
+            activeProfile = PromptProfile.activeName(in: profiles)
+            inputFocused = true
+        }
+        .onChange(of: activeProfile) { _, _ in
+            // 미러 즉시 갱신 — ConversationController는 send마다 systemPrompt를 읽으므로
+            // 다음 전송부터 새 프로필이 반영된다.
+            PromptProfile.setActive(activeProfile, in: profiles)
+        }
+    }
+
+    // MARK: - Profile row
+
+    /// 프롬프트 프로필 드롭다운. ⌘P로 열리고, 열린 메뉴는 네이티브 ↑↓·⏎·타이핑 검색을
+    /// 지원한다 — 마우스 없이 ⌘P → ↑↓ → ⏎ 흐름 성립.
+    private var profileRow: some View {
+        HStack(spacing: 6) {
+            ProfileDropdown(titles: profiles.map(\.name), selection: $activeProfile)
+                .fixedSize()
+            Text("⌘P")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            Spacer(minLength: 0)
+        }
     }
 
     // MARK: - Insert mode
@@ -145,5 +172,74 @@ struct ConversationView: View {
         let text = input
         input = ""
         controller.send(text)
+    }
+}
+
+// MARK: - Profile dropdown
+
+/// NSPopUpButton 기반 프로필 선택기. SwiftUI Picker는 프로그램적으로 열 수 없어
+/// AppKit을 쓴다: 숨은 버튼의 ⌘P가 performClick()으로 메뉴를 연다. 팝업 자체는
+/// 포커스를 거부(refusesFirstResponder)해 입력 필드 포커스가 유지되고, 열린
+/// NSMenu는 first responder와 무관하게 키보드 내비게이션을 받는다.
+private struct ProfileDropdown: View {
+    let titles: [String]
+    @Binding var selection: String
+    @State private var proxy = PopUpProxy()
+
+    var body: some View {
+        PopUpButton(titles: titles, selection: $selection, proxy: proxy)
+            .overlay(
+                Button("") { proxy.button?.performClick(nil) }
+                    .keyboardShortcut("p", modifiers: .command)
+                    .buttonStyle(.plain)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            )
+    }
+}
+
+/// SwiftUI 단축키 버튼에서 AppKit 팝업을 열기 위한 약한 참조 홀더.
+@MainActor
+private final class PopUpProxy {
+    weak var button: NSPopUpButton?
+}
+
+private struct PopUpButton: NSViewRepresentable {
+    let titles: [String]
+    @Binding var selection: String
+    let proxy: PopUpProxy
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.controlSize = .small
+        button.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        // 패널 표시 시 입력 필드가 포커스를 가져가야 한다 — 팝업은 key view 순환에서 제외.
+        button.refusesFirstResponder = true
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.changed(_:))
+        proxy.button = button
+        return button
+    }
+
+    func updateNSView(_ button: NSPopUpButton, context: Context) {
+        context.coordinator.selection = $selection
+        if button.itemTitles != titles {
+            button.removeAllItems()
+            button.addItems(withTitles: titles)
+        }
+        button.selectItem(withTitle: selection)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var selection: Binding<String>
+        init(selection: Binding<String>) { self.selection = selection }
+
+        @objc func changed(_ sender: NSPopUpButton) {
+            selection.wrappedValue = sender.titleOfSelectedItem ?? ""
+        }
     }
 }

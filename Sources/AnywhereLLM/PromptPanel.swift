@@ -107,7 +107,11 @@ final class PromptPanel: NSPanel {
         // 창 크기는 NSHostingView 기본 sizingOptions(autolayout)가 콘텐츠에 자동
         // 추종시킨다 (뷰 쪽 .fixedSize(vertical)가 전제). 여기서 수동 리사이즈 금지 —
         // autolayout 제약과 싸우면 무한 진동(깜빡임). 실측: docs/progress/16.
-        contentView = NSHostingView(rootView: ConversationView(controller: controller))
+        let hosting = NSHostingView(rootView: ConversationView(controller: controller))
+        // 숨긴 타이틀바가 만드는 상단 safe area(~28px)를 제거 — SwiftUI 콘텐츠가
+        // 창 최상단부터 시작해, 프로필 드롭다운 행이 원래 비어 있던 그 여백을 차지한다.
+        hosting.safeAreaRegions = []
+        contentView = hosting
     }
 
     /// Focus is handled by SwiftUI (.onAppear + @FocusState); makeKey suffices here.
