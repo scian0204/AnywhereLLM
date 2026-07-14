@@ -48,11 +48,26 @@ enum TextTargetService {
         let full = stringAttribute(element, kAXValueAttribute as CFString)
 
         if selected == nil || selected?.isEmpty == true {
-            // 선택 범위는 있다는데 selectedText 속성이 비는 앱(웹뷰/Electron 일부),
-            // 또는 AX가 아예 침묵(full도 없음)하는 앱 → ⌘C 클립보드 폴백.
-            // 범위가 0이고 full이 있으면 진짜 선택 없음 — 폴백하지 않는다
-            // (⌘C가 줄 전체를 복사하는 에디터에서 오탐 방지).
-            if selectedRangeLength(element) > 0 || (full == nil || full?.isEmpty == true) {
+            if selectedRangeLength(element) > 0 {
+                // 요소 안에 선택은 있는데 selectedText 속성이 비는 앱
+                // (웹뷰/Electron 일부) → ⌘C 클립보드 폴백.
+                selected = clipboardCopyFallback()
+            } else if let webArea = webAreaAncestor(of: element),
+                      let webSelection = stringAttribute(webArea, kAXSelectedTextAttribute as CFString),
+                      !webSelection.isEmpty {
+                // 포커스 요소(입력칸)엔 선택이 없는데 문서 선택이 딴 곳에 있다 —
+                // Slack류 메신저는 채팅 텍스트를 선택해도 컴포저가 포커스를 쥔다
+                // (실측: docs/progress/20). 선택이 포커스 요소 밖 = 삽입 대상 아님
+                // → 보기 전용 컨텍스트. axElement는 웹 영역 — 패널 앵커(선택 위치
+                // 텍스트마커 bounds)용이며, 보기 전용이라 쓰기 경로엔 안 쓰인다.
+                return TargetContext(appName: appName, bundleId: bundleId,
+                                     selectedText: webSelection, fullText: nil,
+                                     isSecureField: false, isEditable: false,
+                                     axElement: webArea)
+            } else if full == nil || full?.isEmpty == true {
+                // AX가 아예 침묵(full도 없음)하거나 빈 요소 → ⌘C 클립보드 폴백.
+                // 범위가 0이고 full이 차 있으면 진짜 선택 없음 — 폴백하지 않는다
+                // (⌘C가 줄 전체를 복사하는 에디터에서 오탐 방지).
                 selected = clipboardCopyFallback()
             }
         }
@@ -168,6 +183,26 @@ enum TextTargetService {
             return false
         }
         return true
+    }
+
+    /// 조상 중 웹 영역(AXWebArea). 웹 계열 앱은 포커스가 입력칸에 있어도 문서
+    /// 다른 곳의 선택을 웹 영역이 들고 있다 (Chrome 실측: 본문 선택을 selectedText로
+    /// 노출). Slack 실측: 컴포저 → 웹 영역 15홉이라 여유 있게 25홉까지.
+    private static func webAreaAncestor(of element: AXUIElement) -> AXUIElement? {
+        var current = element
+        for _ in 0..<25 {
+            var parent: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parent) == .success,
+                  let parent else { return nil }
+            let ancestor = parent as! AXUIElement
+            let role = stringAttribute(ancestor, kAXRoleAttribute as CFString)
+            if role == "AXWebArea" { return ancestor }
+            if role == (kAXWindowRole as String) || role == (kAXApplicationRole as String) {
+                return nil // 네이티브 계층 도달 — 웹 영역 없음
+            }
+            current = ancestor
+        }
+        return nil
     }
 
     /// kAXSelectedTextRangeAttribute의 선택 길이. 속성 미지원/오류면 0.
