@@ -104,12 +104,16 @@ final class PromptPanel: NSPanel {
         }
         self.controller = controller
 
-        // sizingOptions만으로는 창이 안 자란다 — contentViewController가 없는 창에서
-        // .preferredContentSize는 무효. SwiftUI가 측정한 콘텐츠 크기를 받아 직접 리사이즈.
-        let host = NSHostingView(rootView: ConversationView(
-            controller: controller,
-            onContentSizeChange: { [weak self] size in self?.resizeToFit(contentSize: size) }
-        ))
+        // 창은 스스로 SwiftUI 콘텐츠를 따라 리사이즈되지 않는다 (contentViewController
+        // 없는 창에서 sizingOptions 무효). GeometryReader 측정도 창 크기에 갇혀(순환) 불가.
+        // layout() 훅에서 fittingSize(제약 무관한 이상 크기)를 받아 직접 리사이즈한다.
+        let host = PanelHostingView(rootView: ConversationView(controller: controller))
+        host.onLayout = { [weak self, weak host] in
+            guard let self, let host else { return }
+            let size = host.fittingSize
+            // 레이아웃 패스 도중 창 프레임을 바꾸지 않도록 다음 틱으로 미룬다.
+            Task { @MainActor in self.resizeToFit(contentSize: size) }
+        }
         contentView = host
     }
 
@@ -162,5 +166,16 @@ final class PromptPanel: NSPanel {
     /// Esc closes the panel and resets the conversation.
     override func cancelOperation(_ sender: Any?) {
         dismiss()
+    }
+}
+
+/// layout() 시점을 알려주는 호스팅 뷰 — SwiftUI 콘텐츠 변경이 NSView 레이아웃으로
+/// 내려오는 신뢰 가능한 훅. fittingSize는 이 시점에 갱신된 이상 크기를 반환한다
+/// (헤드리스 실측: 콘텐츠 2줄→40줄 교체 시 96→328, docs/progress/15).
+private final class PanelHostingView: NSHostingView<ConversationView> {
+    var onLayout: (() -> Void)?
+    override func layout() {
+        super.layout()
+        onLayout?()
     }
 }

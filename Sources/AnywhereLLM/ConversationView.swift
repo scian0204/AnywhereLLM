@@ -11,9 +11,6 @@ import SwiftUI
 /// ⏎ sends, ⇧⏎ newlines, ⌘⏎ confirms a pending replacement, Esc closes.
 struct ConversationView: View {
     @ObservedObject var controller: ConversationController
-    /// 콘텐츠 크기 변화 통지 — 패널 창은 스스로 리사이즈되지 않아
-    /// (contentViewController 없이 sizingOptions만으론 무효) 여기서 측정해 알린다.
-    var onContentSizeChange: (@MainActor (CGSize) -> Void)? = nil
     @State private var input = ""
     @FocusState private var inputFocused: Bool
 
@@ -27,16 +24,6 @@ struct ConversationView: View {
         }
         .padding(12)
         .frame(width: 460)
-        .background(
-            GeometryReader { proxy in
-                Color.clear.preference(key: ContentSizePreference.self, value: proxy.size)
-            }
-        )
-        .onPreferenceChange(ContentSizePreference.self) { size in
-            guard let onContentSizeChange else { return }
-            // onPreferenceChange는 @Sendable — 메인 액터로 홉해서 전달.
-            Task { @MainActor in onContentSizeChange(size) }
-        }
         .onAppear { inputFocused = true }
     }
 
@@ -151,9 +138,4 @@ struct ConversationView: View {
         input = ""
         controller.send(text)
     }
-}
-
-private struct ContentSizePreference: PreferenceKey {
-    static let defaultValue = CGSize.zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) { value = nextValue() }
 }

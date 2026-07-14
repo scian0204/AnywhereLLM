@@ -25,12 +25,22 @@ NSWindow의 origin은 **좌하단**이라, 결과 스트리밍으로 NSHostingVi
 결과는 고정된 작은 창 안에서 ScrollView가 짓눌리고, 하단 자동 스크롤이
 내용을 위로 밀어냄 — "위로 올라가 안보임" 증상과 일치.
 
-최종 수정:
-- `ConversationView`: GeometryReader + PreferenceKey로 콘텐츠 크기 측정 →
-  `onContentSizeChange` 콜백 (onPreferenceChange는 @Sendable — Task로 메인 액터 홉).
-- `PromptPanel.resizeToFit(contentSize:)`: `frameRect(forContentRect:)`로 창 크기
-  환산 후 좌상단 앵커 유지하며 `setFrame` — 아래로 성장 + visibleFrame 클램프.
-- sizingOptions 의존 제거. 기존 didResize/didMove 앵커 옵저버는 안전망으로 유지.
+2차 수정 (GeometryReader + PreferenceKey 측정): **역시 실패** ("여전히 똑같음").
+원인: GeometryReader는 *실제 배치된* 크기를 잰다 — ScrollView는 유연해서 창이
+준 좁은 높이에 맞춰 압축되므로, 측정값이 항상 현재 창 크기와 같아 리사이즈가
+영원히 no-op (순환 제약).
+
+**최종 수정 (헤드리스 실측으로 검증 후 적용):**
+- 실측 1: `NSHostingView.fittingSize`는 창 제약과 무관한 이상 크기를 정확히
+  반환 (460×328 — ScrollView 콘텐츠 280 캡 포함).
+- 실측 2: `layout()` 오버라이드는 rootView 콘텐츠 교체 시 확실히 발동하고,
+  그 시점 fittingSize가 갱신돼 있음 (2줄→40줄 교체 시 96→328).
+- `PanelHostingView: NSHostingView<ConversationView>` — `layout()` 훅에서
+  `fittingSize`를 `resizeToFit(contentSize:)`로 전달 (레이아웃 패스 중 창 프레임
+  변경을 피하려 다음 틱으로 미룸). GeometryReader/PreferenceKey 플러밍 제거.
+- `PromptPanel.resizeToFit(contentSize:)`: `frameRect(forContentRect:)` 환산,
+  좌상단 앵커 유지 `setFrame` — 아래로 성장 + visibleFrame 클램프.
+- 기존 didResize/didMove 앵커 옵저버는 안전망으로 유지.
 
 ## 2. 미리보기 확정 삽입 실패
 
