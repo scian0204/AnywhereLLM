@@ -21,6 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestAccessibility(prompt: true)
         rebuildMenu()
 
+        // 키체인 재소유 마이그레이션: 예전 서명(ad-hoc 시절) 소유 항목은 읽을 때마다
+        // 암호 프롬프트가 뜬다. 시작 시 한 번 읽어 현 바이너리 소유로 재저장
+        // (빈 값이면 삭제). 이때 프롬프트가 떠도 마지막 — 이후 조용히 읽힌다.
+        if let key = KeychainStore.get() { KeychainStore.set(key) }
+
         let hotkey = HotkeyManager { [weak self] in self?.togglePanel() }
         hotkey.start()
         hotkeyManager = hotkey
@@ -163,6 +168,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(settings)
 
         menu.addItem(.separator())
+        // 실행 중인 바이너리가 어느 빌드인지 즉시 식별 (Makefile이 빌드 시각 스탬프).
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        let buildItem = NSMenuItem(title: "빌드 \(build)", action: nil, keyEquivalent: "")
+        buildItem.isEnabled = false
+        menu.addItem(buildItem)
         menu.addItem(
             NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         )

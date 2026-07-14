@@ -20,6 +20,7 @@ app: build
 	mkdir -p $(CONTENTS)/MacOS $(CONTENTS)/Resources
 	cp $(BIN) $(CONTENTS)/MacOS/$(APP_NAME)
 	cp Resources/Info.plist $(CONTENTS)/Info.plist
+	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $$(date +%y%m%d.%H%M%S)" $(CONTENTS)/Info.plist
 	codesign --force --sign "$(CODESIGN_ID)" --options runtime --identifier $(BUNDLE_ID) $(APP_BUNDLE)
 	@echo "Built $(APP_BUNDLE) (sign: $(CODESIGN_ID))"
 

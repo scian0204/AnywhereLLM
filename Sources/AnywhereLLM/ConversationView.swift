@@ -24,6 +24,11 @@ struct ConversationView: View {
         }
         .padding(12)
         .frame(width: 460)
+        // 세로 이상 크기 강제 — 이게 있어야 NSHostingView가 intrinsic 높이를 노출해
+        // 기본 sizingOptions의 autolayout이 창을 콘텐츠에 자동 추종시킨다 (상단 고정,
+        // 아래로 성장 — 실측: docs/progress/16). 수동 리사이즈 금지: autolayout과
+        // 싸우면 무한 진동(깜빡임)한다.
+        .fixedSize(horizontal: false, vertical: true)
         .onAppear { inputFocused = true }
     }
 

@@ -104,34 +104,10 @@ final class PromptPanel: NSPanel {
         }
         self.controller = controller
 
-        // 창은 스스로 SwiftUI 콘텐츠를 따라 리사이즈되지 않는다 (contentViewController
-        // 없는 창에서 sizingOptions 무효). GeometryReader 측정도 창 크기에 갇혀(순환) 불가.
-        // layout() 훅에서 fittingSize(제약 무관한 이상 크기)를 받아 직접 리사이즈한다.
-        let host = PanelHostingView(rootView: ConversationView(controller: controller))
-        host.onLayout = { [weak self, weak host] in
-            guard let self, let host else { return }
-            let size = host.fittingSize
-            // 레이아웃 패스 도중 창 프레임을 바꾸지 않도록 다음 틱으로 미룬다.
-            Task { @MainActor in self.resizeToFit(contentSize: size) }
-        }
-        contentView = host
-    }
-
-    /// SwiftUI 콘텐츠 크기에 창을 맞춘다. 좌상단 앵커 고정(아래로 성장) + 화면 클램프.
-    private func resizeToFit(contentSize: CGSize) {
-        guard contentSize.width > 0, contentSize.height > 0 else { return }
-        var target = frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
-        // fittingSize는 소수점 — setFrame 후 AppKit이 정수 픽셀로 반올림하면 다음
-        // layout()에서 또 달라져 무한 리사이즈(깜빡임). 정수화 + 허용오차로 진동 차단.
-        target = NSSize(width: ceil(target.width), height: ceil(target.height))
-        guard abs(target.width - frame.width) > 0.5 || abs(target.height - frame.height) > 0.5 else { return }
-        let topLeft = anchoredTopLeft ?? NSPoint(x: frame.minX, y: frame.maxY)
-        var origin = NSPoint(x: topLeft.x, y: topLeft.y - target.height)
-        if let bounds = (screen ?? NSScreen.main)?.visibleFrame {
-            origin.x = min(max(origin.x, bounds.minX), max(bounds.minX, bounds.maxX - target.width))
-            origin.y = min(max(origin.y, bounds.minY), max(bounds.minY, bounds.maxY - target.height))
-        }
-        setFrame(NSRect(origin: origin, size: target), display: true)
+        // 창 크기는 NSHostingView 기본 sizingOptions(autolayout)가 콘텐츠에 자동
+        // 추종시킨다 (뷰 쪽 .fixedSize(vertical)가 전제). 여기서 수동 리사이즈 금지 —
+        // autolayout 제약과 싸우면 무한 진동(깜빡임). 실측: docs/progress/16.
+        contentView = NSHostingView(rootView: ConversationView(controller: controller))
     }
 
     /// Focus is handled by SwiftUI (.onAppear + @FocusState); makeKey suffices here.
@@ -172,13 +148,3 @@ final class PromptPanel: NSPanel {
     }
 }
 
-/// layout() 시점을 알려주는 호스팅 뷰 — SwiftUI 콘텐츠 변경이 NSView 레이아웃으로
-/// 내려오는 신뢰 가능한 훅. fittingSize는 이 시점에 갱신된 이상 크기를 반환한다
-/// (헤드리스 실측: 콘텐츠 2줄→40줄 교체 시 96→328, docs/progress/15).
-private final class PanelHostingView: NSHostingView<ConversationView> {
-    var onLayout: (() -> Void)?
-    override func layout() {
-        super.layout()
-        onLayout?()
-    }
-}
