@@ -21,11 +21,28 @@
   뷰포트 전체라 앵커로 부적합 — 그 경우 마우스 폴백(선택 끝 지점 근처)이 낫다.
   ponytail: 300pt 임계는 필드/컨테이너 구분 휴리스틱, 오판 사례 나오면 조정.
 
+## 재수정 (1차 "안됨" 보고 후 — 라이브 Chrome 실측)
+
+1차 수정은 요소 전달만 고쳤고 bounds API를 그대로 믿었다. 실측 결과:
+
+- **Chromium 웹 영역의 classic `BoundsForRange`는 실선택(34자)에도 err 0 +
+  제로 크기 rect `(0, 1112, 0, 0)`을 반환** — 성공 코드+쓰레기, 교체 무시
+  (progress/18)와 같은 패턴. 기존 가드(isFinite/isNull)를 통과해 앵커가 화면
+  왼쪽 끝으로 날아갔다. 이게 "안됨"의 원인.
+- **텍스트마커 API는 정상**: `AXSelectedTextMarkerRange` +
+  `AXBoundsForTextMarkerRange` → `(30, 537, 1184, 39)` (실제 선택 라인 bounds,
+  VoiceOver가 쓰는 경로).
+
+변경: `validAnchorRect` — 제로 크기 rect 거부 (순수 캐럿은 width 0이어도
+height > 0). 앵커 체인 = classic BoundsForRange → **텍스트마커 폴백** →
+AXFrame(≤300pt) → 마우스.
+
 ## 검증
 
+- 라이브 Chrome 실측: classic 제로 rect 재현 + 텍스트마커 정상 bounds 확인
+  (백그라운드 PID 질의 — 통제 재현, 사용자 포커스 무접촉).
 - `swift build` 경고 0, `make` 성공. LLMCore 무변경.
 - GUI 실측 필요 (위치 모드 = 캐럿 추적):
-  1. 웹페이지 본문 텍스트 선택 → 핫키 → 패널이 선택 텍스트 근처에 뜨는지
-     (BoundsForRange 미지원 대상이면 마우스 근처 — 선택 직후라 거의 같은 위치).
+  1. 웹페이지 본문 텍스트 선택 → 핫키 → 패널이 선택 텍스트 근처에 뜨는지.
   2. 회귀: 편집 필드 캐럿 추적 기존대로 (캐럿 아래).
   3. 마우스/중앙 모드 무영향.

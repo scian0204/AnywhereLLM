@@ -49,6 +49,10 @@ enum PanelPositioner {
         if let caret = caretRect(of: element) {
             return caret
         }
+        // 웹 영역(Chromium)은 classic BoundsForRange가 제로 rect라 텍스트마커로.
+        if let marker = markerSelectionRect(of: element) {
+            return marker
+        }
         // Fall back to the focused element's frame — 단, 필드 크기일 때만.
         // 보기 전용 컨테이너(AXWebArea 등)의 frame은 뷰포트 전체라 앵커로 부적합 —
         // 그땐 nil을 돌려 마우스(선택 끝 지점 근처) 폴백을 태운다.
@@ -79,8 +83,35 @@ enum PanelPositioner {
 
         var rect = CGRect.zero
         guard AXValueGetValue((boundsValue as! AXValue), .cgRect, &rect) else { return nil }
-        guard rect.width.isFinite, rect.height.isFinite, !rect.isNull else { return nil }
+        guard validAnchorRect(rect) else { return nil }
         return cocoaRect(fromAXTopLeft: rect)
+    }
+
+    /// 선택 텍스트 bounds — WebKit/Chromium 텍스트마커 API (VoiceOver가 쓰는 경로).
+    /// Chromium 웹 영역은 classic BoundsForRange에 err 0 + 제로 크기 rect를
+    /// 반환하므로(실측: docs/progress/19) 이 폴백이 실제 선택 위치를 준다.
+    private static func markerSelectionRect(of element: AXUIElement) -> NSRect? {
+        var markerRange: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element, "AXSelectedTextMarkerRange" as CFString, &markerRange
+        ) == .success, let markerRange else { return nil }
+
+        var boundsValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element, "AXBoundsForTextMarkerRange" as CFString, markerRange, &boundsValue
+        ) == .success, let boundsValue, CFGetTypeID(boundsValue) == AXValueGetTypeID() else { return nil }
+
+        var rect = CGRect.zero
+        guard AXValueGetValue((boundsValue as! AXValue), .cgRect, &rect),
+              validAnchorRect(rect) else { return nil }
+        return cocoaRect(fromAXTopLeft: rect)
+    }
+
+    /// Chromium은 미지원 범위에 성공 코드 + (0,y,0,0) 쓰레기 rect를 반환한다 —
+    /// 제로 크기는 앵커로 쓰지 않는다 (순수 캐럿은 width 0이어도 height > 0).
+    private static func validAnchorRect(_ rect: CGRect) -> Bool {
+        rect.width.isFinite && rect.height.isFinite && !rect.isNull
+            && (rect.width > 0 || rect.height > 0)
     }
 
     private static func axRect(_ element: AXUIElement, _ attribute: CFString) -> CGRect? {
