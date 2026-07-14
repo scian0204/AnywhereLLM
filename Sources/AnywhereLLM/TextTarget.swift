@@ -8,6 +8,7 @@ struct TargetContext {
     let selectedText: String?   // nil = 선택 없음 (또는 보안 필드)
     let fullText: String?       // 전체 필드 내용 (보안 필드면 nil)
     let isSecureField: Bool     // 하드 차단용
+    let isEditable: Bool        // false = 결과 삽입 불가 대상 — 보기 전용 흐름
     let axElement: AXUIElement? // 쓰기 시 재사용
 }
 
@@ -27,9 +28,19 @@ enum TextTargetService {
         let bundleId = app?.bundleIdentifier
 
         guard let element = focusedElement() else {
+            // AX 침묵(Chromium/Electron 하이드레이션 전, 원격 데스크톱 등).
+            // Chromium 계열은 이 속성으로 접근성 트리 생성을 요청할 수 있다 —
+            // 다음 핫키부터 선택 캡처가 가능해진다 (fire-and-forget, 대기 없음).
+            if let pid = app?.processIdentifier {
+                AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid),
+                                             "AXManualAccessibility" as CFString,
+                                             kCFBooleanTrue)
+            }
+            // 불명 = 편집 가능: CGEvent 타이핑/⌘V 쓰기는 AX가 불필요해 기존 흐름이
+            // 그대로 동작한다. false로 두면 그 앱들의 삽입이 전면 회귀한다.
             return TargetContext(appName: appName, bundleId: bundleId,
                                  selectedText: nil, fullText: nil,
-                                 isSecureField: false, axElement: nil)
+                                 isSecureField: false, isEditable: true, axElement: nil)
         }
 
         let isSecure = isSecureField(element)
@@ -37,7 +48,7 @@ enum TextTargetService {
             // Hard rule: never read a secure field, never fall back to clipboard.
             return TargetContext(appName: appName, bundleId: bundleId,
                                  selectedText: nil, fullText: nil,
-                                 isSecureField: true, axElement: element)
+                                 isSecureField: true, isEditable: true, axElement: element)
         }
 
         var selected = stringAttribute(element, kAXSelectedTextAttribute as CFString)
@@ -56,7 +67,8 @@ enum TextTargetService {
         return TargetContext(appName: appName, bundleId: bundleId,
                              selectedText: (selected?.isEmpty == true) ? nil : selected,
                              fullText: (full?.isEmpty == true) ? nil : full,
-                             isSecureField: false, axElement: element)
+                             isSecureField: false, isEditable: isEditableElement(element),
+                             axElement: element)
     }
 
     // MARK: - Insert
@@ -96,6 +108,42 @@ enum TextTargetService {
     private static func isSecureField(_ element: AXUIElement) -> Bool {
         guard let subrole = stringAttribute(element, kAXSubroleAttribute as CFString) else { return false }
         return subrole == (kAXSecureTextFieldSubrole as String)
+    }
+
+    /// 포커스 요소가 텍스트 "입력" 대상인지. 웹페이지 본문/PDF/파인더처럼 편집 불가면
+    /// 삽입·교체 흐름 대신 보기 전용(패널에 결과 유지) 흐름을 태운다.
+    ///
+    /// 판정 원칙 = 거부 목록: 오탐(편집 가능 오판)은 기존 동작과 동일해 무해하지만
+    /// 미탐(편집 필드를 보기 전용 오판)은 삽입 기능 회귀라 치명적 — 그래서
+    /// "확실히 편집 불가"(콘텐츠 표시 전용 role + settable 아님)일 때만 false,
+    /// 불명·AX 오류는 전부 true. settable 검사를 role보다 먼저 해 contenteditable
+    /// AXWebArea(웹 리치 에디터)가 거부 목록에 걸리지 않게 한다.
+    private static func isEditableElement(_ element: AXUIElement) -> Bool {
+        var settable = DarwinBoolean(false)
+        if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success,
+           settable.boolValue {
+            return true
+        }
+        if AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
+           settable.boolValue {
+            return true
+        }
+        // 콘텐츠 표시 전용 role — 웹 본문/정적 텍스트/이미지/PDF 스크롤 영역/목록류.
+        let viewOnlyRoles: Set<String> = [
+            "AXWebArea", // WebKit/Chromium 문서 본문 (공개 kAX 상수 없음)
+            kAXStaticTextRole as String,
+            kAXImageRole as String,
+            kAXScrollAreaRole as String,
+            kAXListRole as String,
+            kAXOutlineRole as String,
+            kAXTableRole as String,
+            kAXBrowserRole as String,
+        ]
+        if let role = stringAttribute(element, kAXRoleAttribute as CFString),
+           viewOnlyRoles.contains(role) {
+            return false
+        }
+        return true
     }
 
     /// kAXSelectedTextRangeAttribute의 선택 길이. 속성 미지원/오류면 0.

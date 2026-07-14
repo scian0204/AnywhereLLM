@@ -2,11 +2,12 @@ import SwiftUI
 
 /// The panel UI. Two layouts:
 ///
-/// - **Insert mode** (no selection + immediate): input box + 로딩. 첫 토큰이
-///   도착하면 패널이 숨고 응답이 대상 텍스트박스에 직접 타이핑된다.
-/// - **Select mode** (selection present, or preview): selection preview +
-///   마지막 응답 결과 블록(대화 버블 없음) + input + 확정 버튼. multi-turn은
-///   히스토리로만 유지되고 화면엔 최신 결과만 보인다.
+/// - **Insert mode** (편집 가능 + no selection + immediate): input box + 로딩.
+///   첫 토큰이 도착하면 패널이 숨고 응답이 대상 텍스트박스에 직접 타이핑된다.
+/// - **Select mode** (selection present, preview, or 보기 전용): selection preview +
+///   마지막 응답 결과 블록(대화 버블 없음) + input + 확정 버튼(보기 전용이면 없음 —
+///   결과가 패널에 남는다). multi-turn은 히스토리로만 유지되고 화면엔 최신 결과만 보인다.
+///   선택이 있으면 첫 턴은 빈 입력 ⏎로도 전송된다 (프롬프트 프로필이 지시 역할).
 ///
 /// ⏎ sends, ⇧⏎ newlines, ⌘⏎ confirms a pending replacement, Esc closes.
 struct ConversationView: View {
@@ -62,7 +63,9 @@ struct ConversationView: View {
             if let error = controller.errorMessage { errorText(error) }
 
             HStack(alignment: .bottom, spacing: 8) {
-                inputField(placeholder: "지시를 입력하세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
+                inputField(placeholder: controller.hasSelection && controller.transcript.isEmpty
+                    ? "지시 입력 — 비워둔 채 ⏎면 프롬프트만으로 요청 (Esc 닫기)"
+                    : "지시를 입력하세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
                 if controller.isStreaming {
                     ProgressView().controlSize(.small)
                 }
