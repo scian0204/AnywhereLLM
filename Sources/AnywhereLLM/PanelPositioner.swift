@@ -13,7 +13,11 @@ import ApplicationServices
 @MainActor
 enum PanelPositioner {
     /// Origin (bottom-left, Cocoa coords) to place a panel of `size`.
-    static func origin(for size: NSSize) -> NSPoint {
+    /// `element`: captureContext가 얻은 포커스 요소. 여기서 재질의하지 않는 이유 —
+    /// systemwide 질의는 Chrome에서 항상 실패해(progress/18) 캡처와 다른 결과가
+    /// 나올 수 있다. 캡처된 요소를 그대로 앵커로 쓰면 선택 텍스트(보기 전용 포함)
+    /// 위치에 정확히 붙는다.
+    static func origin(for size: NSSize, anchor element: AXUIElement?) -> NSPoint {
         let mode = UserDefaults.standard.string(forKey: "panelPosition") ?? "caret"
 
         let anchor: NSRect
@@ -27,7 +31,7 @@ enum PanelPositioner {
                 y: screen.frame.midY - size.height / 2
             )
         default: // "caret"
-            anchor = caretAnchorRect() ?? NSRect(origin: NSEvent.mouseLocation, size: .zero)
+            anchor = caretAnchorRect(of: element) ?? NSRect(origin: NSEvent.mouseLocation, size: .zero)
         }
 
         // Place the panel just below the anchor's bottom-left.
@@ -38,30 +42,21 @@ enum PanelPositioner {
 
     // MARK: - Caret / focus geometry (AX, converted to Cocoa coords)
 
-    /// Cocoa-coordinate rect for the caret, or the focused element, or nil.
-    private static func caretAnchorRect() -> NSRect? {
-        guard let element = focusedElement() else { return nil }
+    /// Cocoa-coordinate rect for the caret/selection, or the focused element, or nil.
+    private static func caretAnchorRect(of element: AXUIElement?) -> NSRect? {
+        guard let element else { return nil }
 
         if let caret = caretRect(of: element) {
             return caret
         }
-        // Fall back to the focused element's frame.
+        // Fall back to the focused element's frame — 단, 필드 크기일 때만.
+        // 보기 전용 컨테이너(AXWebArea 등)의 frame은 뷰포트 전체라 앵커로 부적합 —
+        // 그땐 nil을 돌려 마우스(선택 끝 지점 근처) 폴백을 태운다.
         // "AXFrame" is not exported as a Swift constant; use the raw attribute name.
-        if let frame = axRect(element, "AXFrame" as CFString) {
+        if let frame = axRect(element, "AXFrame" as CFString), frame.height <= 300 {
             return cocoaRect(fromAXTopLeft: frame)
         }
         return nil
-    }
-
-    /// The system-wide focused UI element.
-    private static func focusedElement() -> AXUIElement? {
-        let system = AXUIElementCreateSystemWide()
-        var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let value = focused
-        else { return nil }
-        // AXUIElement is a CFType; this cast is safe when the attribute succeeds.
-        return (value as! AXUIElement)
     }
 
     /// Caret bounds via kAXBoundsForRangeParameterizedAttribute at the selection start.
