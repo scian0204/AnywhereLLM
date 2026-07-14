@@ -26,22 +26,21 @@ enum KeychainStore {
 
     @discardableResult
     static func set(_ value: String) -> Bool {
-        let data = Data(value.utf8)
-        let base: [String: Any] = [
+        // 빈 값 = 항목 삭제. 로컬 서버(Ollama 등)는 키가 없다 — 항목이 남아 있으면
+        // 읽을 때마다 키체인 ACL 암호 프롬프트가 뜰 수 있으니 아예 없앤다.
+        guard !value.isEmpty else { return delete() }
+
+        // SecItemUpdate는 기존 항목의 ACL(소유 앱 서명)을 그대로 보존한다 — 예전
+        // 서명(ad-hoc 등)으로 만든 항목이면 갱신해도 암호 프롬프트가 계속된다.
+        // 삭제 후 재추가로 현재 바이너리 소유의 새 ACL을 받는다.
+        delete()
+        let add: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecValueData as String: Data(value.utf8),
         ]
-        // Update if present, otherwise add.
-        let updated = SecItemUpdate(base as CFDictionary,
-                                    [kSecValueData as String: data] as CFDictionary)
-        if updated == errSecSuccess { return true }
-        if updated == errSecItemNotFound {
-            var add = base
-            add[kSecValueData as String] = data
-            return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
-        }
-        return false
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
     @discardableResult

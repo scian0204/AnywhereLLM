@@ -120,8 +120,11 @@ final class PromptPanel: NSPanel {
     /// SwiftUI 콘텐츠 크기에 창을 맞춘다. 좌상단 앵커 고정(아래로 성장) + 화면 클램프.
     private func resizeToFit(contentSize: CGSize) {
         guard contentSize.width > 0, contentSize.height > 0 else { return }
-        let target = frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
-        guard target != frame.size else { return }
+        var target = frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
+        // fittingSize는 소수점 — setFrame 후 AppKit이 정수 픽셀로 반올림하면 다음
+        // layout()에서 또 달라져 무한 리사이즈(깜빡임). 정수화 + 허용오차로 진동 차단.
+        target = NSSize(width: ceil(target.width), height: ceil(target.height))
+        guard abs(target.width - frame.width) > 0.5 || abs(target.height - frame.height) > 0.5 else { return }
         let topLeft = anchoredTopLeft ?? NSPoint(x: frame.minX, y: frame.maxY)
         var origin = NSPoint(x: topLeft.x, y: topLeft.y - target.height)
         if let bounds = (screen ?? NSScreen.main)?.visibleFrame {
