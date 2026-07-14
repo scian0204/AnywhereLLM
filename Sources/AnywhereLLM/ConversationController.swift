@@ -229,6 +229,12 @@ final class ConversationController: ObservableObject {
             parts.append("결과는 커서 위치에 삽입될 텍스트만 출력하고, 설명이나 인사말은 넣지 마세요.")
         }
 
+        // think 끄기 소프트 스위치 (Qwen3 계열): chat_template_kwargs를 못 쓰는
+        // 서버(Ollama /v1 등)를 위한 보조 수단. 미지원 모델엔 무해한 텍스트.
+        if defaults.bool(forKey: LLMClient.disableThinkKey) {
+            parts.append("/no_think")
+        }
+
         return parts.joined(separator: "\n\n")
     }
 

@@ -25,6 +25,7 @@ final class LLMClient {
     // UserDefaults config keys.
     static let baseURLKey = "llm.baseURL"
     static let modelKey = "llm.model"
+    static let disableThinkKey = "llm.disableThink"
 
     private let defaults: UserDefaults
     private let session: URLSession
@@ -102,11 +103,17 @@ final class LLMClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         addAuthIfPresent(&request)
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": model,
             "stream": true,
             "messages": messages.map { ["role": $0.role, "content": $0.content] },
         ]
+        // think 모드 끄기 (Qwen3.5 등): vLLM/SGLang/llama.cpp 계열이 인식하는 표준 키.
+        // Ollama /v1은 이 키를 무시(미지원) — 그 경우 출력은 ThinkTagFilter가 거른다.
+        // OpenAI 등 미인식 서버가 400을 낼 수 있어 옵트인(기본 꺼짐).
+        if defaults.bool(forKey: Self.disableThinkKey) {
+            body["chat_template_kwargs"] = ["enable_thinking": false]
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
     }
