@@ -11,6 +11,9 @@ import SwiftUI
 @MainActor
 final class PromptPanel: NSPanel {
     private var controller: ConversationController?
+    /// 리사이즈 시 고정할 좌상단 점. NSWindow origin은 좌하단이라 콘텐츠가
+    /// 커지면 위로 자라 결과가 화면 위로 밀려난다 — 상단을 고정해 아래로 자라게 한다.
+    private var anchoredTopLeft: NSPoint?
 
     init() {
         super.init(
@@ -35,6 +38,34 @@ final class PromptPanel: NSPanel {
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         animationBehavior = .utilityWindow
+
+        // 콘텐츠 성장(결과 스트리밍) 시 상단 고정 + 화면 안 유지. 드래그로 옮기면 앵커 갱신.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification, object: self, queue: nil
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keepAnchoredOnScreen() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification, object: self, queue: nil
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.anchorTopLeft() }
+        }
+    }
+
+    /// 현재 프레임의 좌상단을 앵커로 저장. 위치 확정 직후(AppDelegate) 호출.
+    func anchorTopLeft() {
+        anchoredTopLeft = NSPoint(x: frame.minX, y: frame.maxY)
+    }
+
+    /// 리사이즈 후 좌상단을 앵커에 되돌리고, 화면(visibleFrame) 밖으로 나가면 밀어넣는다.
+    private func keepAnchoredOnScreen() {
+        guard let topLeft = anchoredTopLeft else { return }
+        var origin = NSPoint(x: topLeft.x, y: topLeft.y - frame.height)
+        if let bounds = (screen ?? NSScreen.main)?.visibleFrame {
+            origin.x = min(max(origin.x, bounds.minX), max(bounds.minX, bounds.maxX - frame.width))
+            origin.y = min(max(origin.y, bounds.minY), max(bounds.minY, bounds.maxY - frame.height))
+        }
+        if origin != frame.origin { setFrameOrigin(origin) }
     }
 
     // Must be true so the panel can receive keyboard input while non-activating.
@@ -89,8 +120,16 @@ final class PromptPanel: NSPanel {
         orderOut(nil)
         controller = nil
         // Short delay so the target app is frontmost again before we synthesize keys / set AX.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            TextTargetService.insert(result, into: context)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            if context.selectedText?.isEmpty == false {
+                // 교체: AX setSelectedText가 선택 영역을 정확히 대체 (⌘V 폴백 포함).
+                TextTargetService.insert(result, into: context)
+            } else {
+                // 삽입(무선택): 유니코드 타이핑 — AX setSelectedText가 조용히 무시되는
+                // 앱(웹뷰 등)과 ⌘V 폴백의 paste 타이밍 의존을 모두 피한다.
+                // 스트리밍 삽입과 같은 검증된 경로. 보안 필드 재확인은 typeText 내부.
+                TextTargetService.typeText(result)
+            }
         }
     }
 

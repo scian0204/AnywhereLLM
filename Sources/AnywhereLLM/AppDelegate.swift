@@ -64,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.present(context: context)
         // Position must be computed against the CURRENT focus, before we show the panel.
         panel.setFrameOrigin(PanelPositioner.origin(for: panel.frame.size))
+        // 이후 콘텐츠가 자라도 상단 고정 + 아래로 성장하도록 좌상단을 앵커.
+        panel.anchorTopLeft()
         // orderFrontRegardless shows without activating the app.
         panel.orderFrontRegardless()
         panel.makeKey()
