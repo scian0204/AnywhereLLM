@@ -16,7 +16,7 @@ struct ConversationView: View {
 
     var body: some View {
         Group {
-            if controller.hasSelection {
+            if controller.showsTranscriptUI {
                 selectMode
             } else {
                 insertMode
@@ -133,7 +133,7 @@ struct ConversationView: View {
 
     private var applyButton: some View {
         Button(action: controller.applyPending) {
-            Text("교체 (⌘⏎)").frame(maxWidth: .infinity)
+            Text(controller.hasSelection ? "교체 (⌘⏎)" : "삽입 (⌘⏎)").frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .keyboardShortcut(.return, modifiers: .command)

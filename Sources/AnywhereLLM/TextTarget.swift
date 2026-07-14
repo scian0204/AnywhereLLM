@@ -43,9 +43,14 @@ enum TextTargetService {
         var selected = stringAttribute(element, kAXSelectedTextAttribute as CFString)
         let full = stringAttribute(element, kAXValueAttribute as CFString)
 
-        // AX gave us nothing usable — try the clipboard ⌘C fallback for selection.
-        if (selected == nil || selected?.isEmpty == true) && (full == nil || full?.isEmpty == true) {
-            selected = clipboardCopyFallback()
+        if selected == nil || selected?.isEmpty == true {
+            // 선택 범위는 있다는데 selectedText 속성이 비는 앱(웹뷰/Electron 일부),
+            // 또는 AX가 아예 침묵(full도 없음)하는 앱 → ⌘C 클립보드 폴백.
+            // 범위가 0이고 full이 있으면 진짜 선택 없음 — 폴백하지 않는다
+            // (⌘C가 줄 전체를 복사하는 에디터에서 오탐 방지).
+            if selectedRangeLength(element) > 0 || (full == nil || full?.isEmpty == true) {
+                selected = clipboardCopyFallback()
+            }
         }
 
         return TargetContext(appName: appName, bundleId: bundleId,
@@ -91,6 +96,16 @@ enum TextTargetService {
     private static func isSecureField(_ element: AXUIElement) -> Bool {
         guard let subrole = stringAttribute(element, kAXSubroleAttribute as CFString) else { return false }
         return subrole == (kAXSecureTextFieldSubrole as String)
+    }
+
+    /// kAXSelectedTextRangeAttribute의 선택 길이. 속성 미지원/오류면 0.
+    private static func selectedRangeLength(_ element: AXUIElement) -> Int {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return 0 }
+        var range = CFRange()
+        guard AXValueGetValue((value as! AXValue), .cfRange, &range) else { return 0 }
+        return range.length
     }
 
     private static func setSelectedText(_ element: AXUIElement, _ text: String) -> Bool {

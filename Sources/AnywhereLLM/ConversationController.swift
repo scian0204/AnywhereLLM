@@ -10,13 +10,12 @@ struct TranscriptEntry: Identifiable {
     var text: String
 }
 
-/// Drives one panel session. Two modes, decided by whether text was selected:
+/// Drives one panel session. UX는 선택 유무 × applyMode로 갈린다:
 ///
-/// - **Insert mode** (no selection): the reply is typed straight into the target
-///   text box as it streams (clipboard-free Unicode key events). No transcript,
-///   no buttons. `applyMode` is ignored — insert is always live streaming.
-/// - **Select mode** (selection present): full transcript UI with multi-turn and
-///   a preview/immediate `applyMode` for confirming the replacement.
+/// - **Transcript UX** (선택 있음, 또는 applyMode=preview): 패널에 스트리밍 표시 +
+///   multi-turn. preview면 확정 버튼(교체/삽입), immediate+선택이면 완료 시 자동 교체.
+/// - **실시간 타이핑** (선택 없음 + applyMode=immediate): 패널을 숨기고 응답을
+///   대상 텍스트박스에 그대로 타이핑 (클립보드 무접촉 유니코드 키 이벤트).
 ///
 /// Settings (UserDefaults, defaults hardcoded — settings UI is step 6):
 ///   applyMode       "preview"(default) / "immediate"   [select mode only]
@@ -69,14 +68,18 @@ final class ConversationController: ObservableObject {
 
     // MARK: - Sending
 
+    /// 패널에 transcript를 그리는 UX인지 (선택 모드 전부 + 삽입 모드 preview).
+    /// 삽입 모드 immediate만 실시간 타이핑(패널 숨김) 경로를 탄다.
+    var showsTranscriptUI: Bool { hasSelection || applyMode != "immediate" }
+
     func send(_ input: String) {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isStreaming else { return }
         errorMessage = nil
         pendingResult = nil
 
-        if hasSelection {
-            sendSelectTurn(trimmed)
+        if showsTranscriptUI {
+            sendTranscriptTurn(trimmed)
         } else {
             sendInsertTurn(trimmed)
         }
@@ -136,9 +139,9 @@ final class ConversationController: ObservableObject {
         }
     }
 
-    // MARK: - Select mode (transcript + confirm)
+    // MARK: - Transcript mode (선택 모드 전부 + 삽입 모드 preview: 화면 표시 + 확정)
 
-    private func sendSelectTurn(_ input: String) {
+    private func sendTranscriptTurn(_ input: String) {
         // Prior completed turns are everything currently in the transcript.
         let prior = transcript.map {
             ChatMessage(role: $0.role == .user ? "user" : "assistant", content: $0.text)
@@ -170,11 +173,11 @@ final class ConversationController: ObservableObject {
             } catch {
                 errorMessage = (error as? LLMError)?.errorDescription ?? error.localizedDescription
             }
-            finishSelectStreaming(assistantIndex: assistantIndex)
+            finishTranscriptStreaming(assistantIndex: assistantIndex)
         }
     }
 
-    private func finishSelectStreaming(assistantIndex: Int) {
+    private func finishTranscriptStreaming(assistantIndex: Int) {
         isStreaming = false
         // 취소된 세션(핫키 재입력/Esc)은 부분 결과를 절대 적용하지 않는다.
         guard !Task.isCancelled, errorMessage == nil, assistantIndex < transcript.count else { return }
