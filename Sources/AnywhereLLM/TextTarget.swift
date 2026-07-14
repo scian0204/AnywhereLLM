@@ -15,9 +15,10 @@ struct TargetContext {
 /// Read/write abstraction for the system-wide focused text element.
 ///
 /// Reads prefer AX attributes and fall back to a clipboard-backed ⌘C when AX
-/// returns nothing. Writes prefer AX `kAXSelectedTextAttribute` and fall back
-/// to a clipboard-backed ⌘V. Secure fields (password inputs) are hard-blocked:
-/// no text is ever captured and no clipboard fallback runs.
+/// returns nothing. Writes prefer AX `kAXSelectedTextAttribute` (반영 검증 포함)
+/// and fall back to Unicode key-event typing, which replaces the live selection.
+/// Secure fields (password inputs) are hard-blocked: no text is ever captured
+/// and no clipboard fallback runs.
 enum TextTargetService {
 
     // MARK: - Capture
@@ -27,16 +28,8 @@ enum TextTargetService {
         let appName = app?.localizedName
         let bundleId = app?.bundleIdentifier
 
-        guard let element = focusedElement() else {
-            // AX 침묵(Chromium/Electron 하이드레이션 전, 원격 데스크톱 등).
-            // Chromium 계열은 이 속성으로 접근성 트리 생성을 요청할 수 있다 —
-            // 다음 핫키부터 선택 캡처가 가능해진다 (fire-and-forget, 대기 없음).
-            if let pid = app?.processIdentifier {
-                AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid),
-                                             "AXManualAccessibility" as CFString,
-                                             kCFBooleanTrue)
-            }
-            // 불명 = 편집 가능: CGEvent 타이핑/⌘V 쓰기는 AX가 불필요해 기존 흐름이
+        guard let element = focusedElement(wakeIfNeeded: true) else {
+            // 불명 = 편집 가능: CGEvent 타이핑 쓰기는 AX가 불필요해 기존 흐름이
             // 그대로 동작한다. false로 두면 그 앱들의 삽입이 전면 회귀한다.
             return TargetContext(appName: appName, bundleId: bundleId,
                                  selectedText: nil, fullText: nil,
@@ -79,23 +72,54 @@ enum TextTargetService {
 
         // Try AX first: setting kAXSelectedTextAttribute replaces the selection
         // (or inserts at caret when empty) in apps that support it.
-        if let element = context.axElement, setSelectedText(element, text) {
+        if let element = context.axElement, setSelectedTextVerified(element, text) {
             return
         }
 
-        // Fallback: clipboard-backed ⌘V.
-        clipboardPasteFallback(text)
+        // AX 실패 또는 무시(Chromium은 success를 반환하고 조용히 무시 — 실측:
+        // docs/progress/18). 이때 대상의 선택은 그대로 살아 있으므로 유니코드
+        // 타이핑이 선택을 자연스럽게 대체한다. 삽입 모드에서 검증된 경로와 동일.
+        typeText(text)
     }
 
     // MARK: - AX helpers
 
-    private static func focusedElement() -> AXUIElement? {
+    /// 포커스 요소 조회. systemwide 질의는 Chrome에서 트리 상태와 무관하게 항상
+    /// -25204로 실패한다 (실측: docs/progress/18) — frontmost 앱 요소 경유로 재시도.
+    /// `wakeIfNeeded`: Chromium 웹 콘텐츠 AX 트리는 클라이언트 질의를 감지해야
+    /// 생성된다. AXWindows 질의가 생성 트리거(~250ms 내 하이드레이션, 실측),
+    /// Electron은 AXManualAccessibility. 재시도 대기(최대 ~300ms)가 있으므로
+    /// 핫키 캡처 경로에서만 켠다 — 스트리밍 중 보안 필드 재확인은 false.
+    private static func focusedElement(wakeIfNeeded: Bool = false) -> AXUIElement? {
         let system = AXUIElementCreateSystemWide()
         var value: CFTypeRef?
-        let err = AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &value)
-        guard err == .success, let value else { return nil }
-        // AXUIElement is a CFType; force-cast is the documented pattern here.
-        return (value as! AXUIElement)
+        if AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &value) == .success,
+           let value {
+            // AXUIElement is a CFType; force-cast is the documented pattern here.
+            return (value as! AXUIElement)
+        }
+
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        var focused: CFTypeRef?
+        if AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+           let focused {
+            return (focused as! AXUIElement)
+        }
+
+        guard wakeIfNeeded else { return nil }
+        var windows: CFTypeRef?
+        _ = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windows)
+        AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        for _ in 0..<3 {
+            Thread.sleep(forTimeInterval: 0.1)
+            var retried: CFTypeRef?
+            if AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &retried) == .success,
+               let retried {
+                return (retried as! AXUIElement)
+            }
+        }
+        return nil
     }
 
     private static func stringAttribute(_ element: AXUIElement, _ attr: CFString) -> String? {
@@ -156,9 +180,20 @@ enum TextTargetService {
         return range.length
     }
 
-    private static func setSelectedText(_ element: AXUIElement, _ text: String) -> Bool {
+    /// kAXSelectedTextAttribute 쓰기 + 실제 반영 검증. Chromium은 무시하면서도
+    /// .success를 반환하므로 성공 코드를 믿을 수 없다 — value/selectedText가
+    /// 실제로 변했을 때만 true. 검증 불능(둘 다 못 읽음)도 미적용으로 취급해
+    /// 폴백을 태운다.
+    private static func setSelectedTextVerified(_ element: AXUIElement, _ text: String) -> Bool {
+        let valueBefore = stringAttribute(element, kAXValueAttribute as CFString)
+        let selectionBefore = stringAttribute(element, kAXSelectedTextAttribute as CFString)
         let err = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString)
-        return err == .success
+        guard err == .success else { return false }
+        // 일부 앱은 반영이 비동기 — 짧게 기다렸다 재확인 (미적용 오판 시 이중 입력 위험).
+        Thread.sleep(forTimeInterval: 0.05)
+        if valueBefore != stringAttribute(element, kAXValueAttribute as CFString) { return true }
+        if selectionBefore != stringAttribute(element, kAXSelectedTextAttribute as CFString) { return true }
+        return false
     }
 
     // MARK: - Clipboard fallbacks
@@ -177,22 +212,6 @@ enum TextTargetService {
 
         restorePasteboard(pb, items: backup)
         return copied
-    }
-
-    /// Backs up the pasteboard, writes `text`, injects ⌘V, waits briefly for the
-    /// paste to land, then restores the original pasteboard.
-    private static func clipboardPasteFallback(_ text: String) {
-        let pb = NSPasteboard.general
-        let backup = backupPasteboard(pb)
-
-        pb.clearContents()
-        pb.setString(text, forType: .string)
-
-        sendKey(0x09, command: true) // 'v'
-
-        // Give the target app time to consume the paste before we restore.
-        Thread.sleep(forTimeInterval: 0.1)
-        restorePasteboard(pb, items: backup)
     }
 
     private static func waitForChange(_ pb: NSPasteboard, from before: Int, timeout: TimeInterval) -> Bool {
