@@ -25,7 +25,7 @@ final class SettingsWindowController {
         let hosting = NSHostingController(rootView: view)
 
         let win = NSWindow(contentViewController: hosting)
-        win.title = "AnywhereLLM 설정"
+        win.title = L("settings.windowTitle")
         win.styleMask = [.titled, .closable, .miniaturizable]
         win.isReleasedWhenClosed = false
         win.center()

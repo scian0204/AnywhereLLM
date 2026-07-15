@@ -84,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let button = statusItem.button
         let original = button?.image
         button?.image = NSImage(systemSymbolName: "lock.slash",
-                                accessibilityDescription: "보안 필드 차단됨")
+                                accessibilityDescription: L("app.secureFieldBlocked"))
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             button?.image = original
         }
@@ -133,15 +133,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appItem)
 
         let editItem = NSMenuItem()
-        let edit = NSMenu(title: "편집")
-        edit.addItem(withTitle: "실행 취소", action: Selector(("undo:")), keyEquivalent: "z")
-        let redo = edit.addItem(withTitle: "다시 실행", action: Selector(("redo:")), keyEquivalent: "z")
+        let edit = NSMenu(title: L("menu.edit"))
+        edit.addItem(withTitle: L("menu.undo"), action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = edit.addItem(withTitle: L("menu.redo"), action: Selector(("redo:")), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]
         edit.addItem(.separator())
-        edit.addItem(withTitle: "잘라내기", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "복사", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "붙여넣기", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "전체 선택", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(withTitle: L("menu.cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: L("menu.copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: L("menu.paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: L("menu.selectAll"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
         mainMenu.addItem(editItem)
 
@@ -155,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !hasAccessibility {
             let warn = NSMenuItem(
-                title: "접근성 권한 필요",
+                title: L("menu.accessibilityNeeded"),
                 action: #selector(openAccessibilitySettings),
                 keyEquivalent: ""
             )
@@ -164,18 +164,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(.separator())
         }
 
-        let settings = NSMenuItem(title: "설정…", action: #selector(openSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: L("menu.settings"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
 
         menu.addItem(.separator())
         // 실행 중인 바이너리가 어느 빌드인지 즉시 식별 (Makefile이 빌드 시각 스탬프).
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
-        let buildItem = NSMenuItem(title: "빌드 \(build)", action: nil, keyEquivalent: "")
+        let buildItem = NSMenuItem(title: L("menu.build", build), action: nil, keyEquivalent: "")
         buildItem.isEnabled = false
         menu.addItem(buildItem)
         menu.addItem(
-            NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+            NSMenuItem(title: L("menu.quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         )
 
         statusItem.menu = menu

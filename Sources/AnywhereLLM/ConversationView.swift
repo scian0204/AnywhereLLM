@@ -66,7 +66,7 @@ struct ConversationView: View {
     // 토큰 도착 직전에 패널이 숨고 대상 텍스트박스 타이핑이 시작된다.
     private var insertMode: some View {
         VStack(alignment: .leading, spacing: 8) {
-            inputField(placeholder: "무엇이든 물어보세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
+            inputField(placeholder: L("input.ask"))
 
             if controller.isStreaming { loadingRow }
 
@@ -91,8 +91,8 @@ struct ConversationView: View {
 
             HStack(alignment: .bottom, spacing: 8) {
                 inputField(placeholder: controller.hasSelection && controller.transcript.isEmpty
-                    ? "지시 입력 — 비워둔 채 ⏎면 프롬프트만으로 요청 (Esc 닫기)"
-                    : "지시를 입력하세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)")
+                    ? L("input.instructFirst")
+                    : L("input.instruct"))
                 if controller.isStreaming {
                     ProgressView().controlSize(.small)
                 }
@@ -137,7 +137,7 @@ struct ConversationView: View {
     private var loadingRow: some View {
         HStack(spacing: 6) {
             ProgressView().controlSize(.small)
-            Text("생성 중…").font(.callout).foregroundStyle(.secondary)
+            Text(L("panel.generating")).font(.callout).foregroundStyle(.secondary)
         }
     }
 
@@ -162,7 +162,7 @@ struct ConversationView: View {
 
     private var applyButton: some View {
         Button(action: controller.applyPending) {
-            Text(controller.hasSelection ? "교체 (⌘⏎)" : "삽입 (⌘⏎)").frame(maxWidth: .infinity)
+            Text(controller.hasSelection ? L("panel.replace") : L("panel.insert")).frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .keyboardShortcut(.return, modifiers: .command)

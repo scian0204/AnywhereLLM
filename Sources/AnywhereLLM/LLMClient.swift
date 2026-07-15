@@ -13,9 +13,9 @@ enum LLMError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .invalidBaseURL(url):
-            return "Base URL이 올바르지 않습니다: \(url)"
+            return L("error.invalidBaseURL", url)
         case let .http(status, message):
-            return "LLM 요청 실패 (HTTP \(status)): \(message)"
+            return L("error.httpFailure", status, message)
         }
     }
 }
@@ -67,7 +67,7 @@ final class LLMClient {
 
                     let (bytes, response) = try await session.bytes(for: request)
                     guard let http = response as? HTTPURLResponse else {
-                        throw LLMError.http(status: -1, message: "잘못된 응답")
+                        throw LLMError.http(status: -1, message: L("error.invalidResponse"))
                     }
                     if http.statusCode != 200 {
                         throw LLMError.http(status: http.statusCode,
@@ -124,7 +124,7 @@ final class LLMClient {
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
             throw LLMError.http(status: http.statusCode,
-                                message: String(data: data, encoding: .utf8) ?? "알 수 없는 오류")
+                                message: String(data: data, encoding: .utf8) ?? L("error.unknown"))
         }
         let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let items = obj?["data"] as? [[String: Any]] ?? []
@@ -189,6 +189,6 @@ final class LLMClient {
                 return message
             }
         }
-        return String(data: data, encoding: .utf8) ?? "알 수 없는 오류"
+        return String(data: data, encoding: .utf8) ?? L("error.unknown")
     }
 }

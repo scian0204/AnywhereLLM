@@ -40,18 +40,18 @@ struct SettingsView: View {
         Form {
             Section("LLM") {
                 TextField("Base URL", text: $baseURL)
-                SecureField("API 키", text: $apiKey)
+                SecureField(L("settings.apiKey"), text: $apiKey)
                     .onSubmit { KeychainStore.set(apiKey) }
                     .onChange(of: apiKey) { _, new in KeychainStore.set(new) }
 
                 HStack {
-                    TextField("모델", text: $model)
-                    Button(fetching ? "가져오는 중…" : "모델 가져오기") { fetchModels() }
+                    TextField(L("settings.model"), text: $model)
+                    Button(fetching ? L("settings.fetching") : L("settings.fetchModels")) { fetchModels() }
                         .disabled(fetching)
                 }
                 if !fetchedModels.isEmpty {
                     // Text field stays the source of truth; picker just fills it.
-                    Picker("가져온 모델", selection: $model) {
+                    Picker(L("settings.fetchedModels"), selection: $model) {
                         ForEach(fetchedModels, id: \.self) { Text($0).tag($0) }
                     }
                 }
@@ -59,45 +59,45 @@ struct SettingsView: View {
                     Text(fetchError).font(.caption).foregroundStyle(.red)
                 }
 
-                Toggle("생각(think) 모드 끄기", isOn: $disableThink)
+                Toggle(L("settings.disableThink"), isOn: $disableThink)
                 if disableThink {
-                    Text("Qwen3.5/Gemma 4 등 reasoning 모델의 생각 과정을 요청 단계에서 끕니다. Ollama는 네이티브 API로 자동 전환해 완전 차단합니다. 미지원 서버(OpenAI 등)에서 오류가 나면 끄세요. <think> 출력 필터는 항상 동작합니다.")
+                    Text(L("settings.disableThinkHelp"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("동작") {
-                Picker("결과 반영", selection: $applyMode) {
-                    Text("미리보기 후 확정").tag("preview")
-                    Text("즉시 반영").tag("immediate")
+            Section(L("settings.behavior")) {
+                Picker(L("settings.applyMode"), selection: $applyMode) {
+                    Text(L("settings.applyPreview")).tag("preview")
+                    Text(L("settings.applyImmediate")).tag("immediate")
                 }
-                Picker("패널 위치", selection: $panelPosition) {
-                    Text("캐럿 추적").tag("caret")
-                    Text("마우스 위치").tag("mouse")
-                    Text("화면 중앙").tag("center")
+                Picker(L("settings.panelPosition"), selection: $panelPosition) {
+                    Text(L("settings.positionCaret")).tag("caret")
+                    Text(L("settings.positionMouse")).tag("mouse")
+                    Text(L("settings.positionCenter")).tag("center")
                 }
             }
 
-            Section("컨텍스트") {
-                Toggle("대상 앱 이름 포함", isOn: $includeAppName)
-                Toggle("필드 전체 내용 포함", isOn: $includeFullText)
+            Section(L("settings.context")) {
+                Toggle(L("settings.includeAppName"), isOn: $includeAppName)
+                Toggle(L("settings.includeFullText"), isOn: $includeFullText)
                 if includeFullText {
-                    Text("포커스된 필드 전체 내용이 API로 전송됩니다.")
+                    Text(L("settings.fullTextWarning"))
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
             }
 
-            Section("시스템 프롬프트") {
+            Section(L("settings.systemPrompt")) {
                 HStack {
-                    Picker("프로필", selection: $activeProfile) {
+                    Picker(L("settings.profile"), selection: $activeProfile) {
                         ForEach(profiles) { Text($0.name).tag($0.name) }
                     }
                     .onChange(of: activeProfile) { _, _ in mirrorActivePrompt() }
-                    Button("추가") { addProfile() }
-                    Button("이름변경") { renameProfile() }
-                    Button("삭제") { deleteProfile() }
+                    Button(L("settings.add")) { addProfile() }
+                    Button(L("settings.rename")) { renameProfile() }
+                    Button(L("settings.delete")) { deleteProfile() }
                         .disabled(profiles.count <= 1)
                 }
                 TextEditor(text: activePromptBinding)
@@ -105,19 +105,19 @@ struct SettingsView: View {
                     .font(.body)
             }
 
-            Section("핫키") {
+            Section(L("settings.hotkey")) {
                 HStack {
                     Text(hotkeyDisplay)
                         .font(.system(.body, design: .monospaced))
                     Spacer()
-                    Button(recording ? "키 입력 대기…" : "녹화") {
+                    Button(recording ? L("settings.recordingKeys") : L("settings.record")) {
                         recording ? stopRecording() : startRecording()
                     }
                 }
             }
 
-            Section("시스템") {
-                Toggle("로그인 시 시작", isOn: $launchAtLogin)
+            Section(L("settings.system")) {
+                Toggle(L("settings.launchAtLogin"), isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in setLaunchAtLogin(on) }
             }
         }
@@ -140,7 +140,7 @@ struct SettingsView: View {
             do {
                 let models = try await LLMClient().fetchModels()
                 fetchedModels = models
-                if models.isEmpty { fetchError = "모델 목록이 비어 있습니다." }
+                if models.isEmpty { fetchError = L("settings.emptyModelList") }
             } catch {
                 fetchError = (error as? LocalizedError)?.errorDescription ?? "\(error)"
             }
@@ -181,7 +181,7 @@ struct SettingsView: View {
     }
 
     private func addProfile() {
-        let name = uniqueName("새 프로필")
+        let name = uniqueName(L("settings.newProfile"))
         profiles.append(PromptProfile(name: name, prompt: ""))
         activeProfile = name
         saveProfiles()
@@ -214,12 +214,12 @@ struct SettingsView: View {
     /// Simple modal text prompt — no custom sheet needed for a rename.
     private func promptForName(current: String) -> String? {
         let alert = NSAlert()
-        alert.messageText = "프로필 이름"
+        alert.messageText = L("settings.profileName")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
         field.stringValue = current
         alert.accessoryView = field
-        alert.addButton(withTitle: "확인")
-        alert.addButton(withTitle: "취소")
+        alert.addButton(withTitle: L("common.ok"))
+        alert.addButton(withTitle: L("common.cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         let trimmed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
@@ -288,7 +288,7 @@ extension PromptProfile {
            !decoded.isEmpty {
             return decoded
         }
-        return [PromptProfile(name: "기본", prompt: d.string(forKey: mirrorKey) ?? "")]
+        return [PromptProfile(name: L("settings.defaultProfile"), prompt: d.string(forKey: mirrorKey) ?? "")]
     }
 
     /// 저장된 활성 이름이 목록에 있으면 그것, 아니면 첫 프로필.

@@ -1,0 +1,76 @@
+/* Panel */
+"input.ask" = "Ask anything… (⏎ send, ⇧⏎ newline, Esc close)";
+"input.instructFirst" = "Enter instructions — empty ⏎ sends the prompt alone (Esc close)";
+"input.instruct" = "Enter instructions… (⏎ send, ⇧⏎ newline, Esc close)";
+"panel.generating" = "Generating…";
+"panel.replace" = "Replace (⌘⏎)";
+"panel.insert" = "Insert (⌘⏎)";
+
+/* LLM prompt construction */
+"prompt.appContext" = "The user is writing text in the \"%@\" app.";
+"prompt.viewOnly" = "Your answer is shown to the user in a panel. Answer the request concisely and accurately.";
+"prompt.editSelection" = "Edit the user's selected text according to the instructions. Output only the text that replaces the selection — no explanations or greetings.";
+"prompt.insertAtCursor" = "Output only the text to insert at the cursor position — no explanations or greetings.";
+"prompt.sectionSelection" = "[Selected text]";
+"prompt.sectionFullText" = "[Full field content]";
+"prompt.sectionRequest" = "[Request]";
+
+/* Settings */
+"settings.windowTitle" = "AnywhereLLM Settings";
+"settings.apiKey" = "API Key";
+"settings.model" = "Model";
+"settings.fetching" = "Fetching…";
+"settings.fetchModels" = "Fetch Models";
+"settings.fetchedModels" = "Fetched Models";
+"settings.emptyModelList" = "The model list is empty.";
+"settings.disableThink" = "Disable think mode";
+"settings.disableThinkHelp" = "Disables the thinking phase of reasoning models (Qwen3.5, Gemma 4, etc.) at request time. Ollama is switched to its native API for full suppression. Turn this off if an unsupported server (e.g. OpenAI) returns errors. The <think> output filter is always active.";
+"settings.behavior" = "Behavior";
+"settings.applyMode" = "Apply Results";
+"settings.applyPreview" = "Preview, then confirm";
+"settings.applyImmediate" = "Apply immediately";
+"settings.panelPosition" = "Panel Position";
+"settings.positionCaret" = "Follow caret";
+"settings.positionMouse" = "At mouse pointer";
+"settings.positionCenter" = "Screen center";
+"settings.context" = "Context";
+"settings.includeAppName" = "Include target app name";
+"settings.includeFullText" = "Include full field content";
+"settings.fullTextWarning" = "The focused field's entire content is sent to the API.";
+"settings.systemPrompt" = "System Prompt";
+"settings.profile" = "Profile";
+"settings.add" = "Add";
+"settings.rename" = "Rename";
+"settings.delete" = "Delete";
+"settings.newProfile" = "New Profile";
+"settings.defaultProfile" = "Default";
+"settings.profileName" = "Profile Name";
+"settings.hotkey" = "Hotkey";
+"settings.recordingKeys" = "Waiting for keys…";
+"settings.record" = "Record";
+"settings.system" = "System";
+"settings.launchAtLogin" = "Launch at login";
+
+/* Common */
+"common.ok" = "OK";
+"common.cancel" = "Cancel";
+
+/* Errors */
+"error.invalidBaseURL" = "Invalid Base URL: %@";
+"error.httpFailure" = "LLM request failed (HTTP %d): %@";
+"error.invalidResponse" = "Invalid response";
+"error.unknown" = "Unknown error";
+
+/* Menu bar */
+"app.secureFieldBlocked" = "Secure field blocked";
+"menu.edit" = "Edit";
+"menu.undo" = "Undo";
+"menu.redo" = "Redo";
+"menu.cut" = "Cut";
+"menu.copy" = "Copy";
+"menu.paste" = "Paste";
+"menu.selectAll" = "Select All";
+"menu.accessibilityNeeded" = "Accessibility Permission Required";
+"menu.settings" = "Settings…";
+"menu.build" = "Build %@";
+"menu.quit" = "Quit";

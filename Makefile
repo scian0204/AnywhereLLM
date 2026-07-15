@@ -33,6 +33,7 @@ bundle:
 	rm -rf $(APP_BUNDLE)
 	mkdir -p $(CONTENTS)/MacOS $(CONTENTS)/Resources
 	cp $(BIN) $(CONTENTS)/MacOS/$(APP_NAME)
+	cp -R $(dir $(BIN))$(APP_NAME)_$(APP_NAME).bundle $(CONTENTS)/Resources/
 	cp Resources/Info.plist $(CONTENTS)/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" $(CONTENTS)/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $$(date +%y%m%d.%H%M%S)" $(CONTENTS)/Info.plist

@@ -261,16 +261,16 @@ final class ConversationController: ObservableObject {
 
         if defaults.object(forKey: Self.includeAppNameKey) as? Bool ?? true,
            let app = context.appName, !app.isEmpty {
-            parts.append("사용자는 \"\(app)\" 앱에서 텍스트를 작성 중입니다.")
+            parts.append(L("prompt.appContext", app))
         }
 
         if isViewOnly {
             // 결과가 어디에도 삽입되지 않고 패널에 표시된다 — 답변 형식 제약 없음.
-            parts.append("답변은 사용자에게 패널로 표시됩니다. 요청에 간결하고 정확하게 답하세요.")
+            parts.append(L("prompt.viewOnly"))
         } else if hasSelection {
-            parts.append("사용자가 선택한 텍스트를 지시에 따라 편집하세요. 결과는 선택 영역을 대체할 텍스트만 출력하고, 설명이나 인사말은 넣지 마세요.")
+            parts.append(L("prompt.editSelection"))
         } else {
-            parts.append("결과는 커서 위치에 삽입될 텍스트만 출력하고, 설명이나 인사말은 넣지 마세요.")
+            parts.append(L("prompt.insertAtCursor"))
         }
 
         // think 끄기 소프트 스위치 (Qwen3 계열): chat_template_kwargs를 못 쓰는
@@ -288,13 +288,13 @@ final class ConversationController: ObservableObject {
 
         var parts: [String] = []
         if let selection = selectionPreview {
-            parts.append("[선택한 텍스트]\n\(selection)")
+            parts.append(L("prompt.sectionSelection") + "\n\(selection)")
         } else if defaults.object(forKey: Self.includeFullTextKey) as? Bool ?? false,
                   let full = context.fullText, !full.isEmpty {
-            parts.append("[현재 필드 전체 내용]\n\(full)")
+            parts.append(L("prompt.sectionFullText") + "\n\(full)")
         }
         // 빈 입력(선택 + ⏎만) — 프롬프트 프로필이 지시 역할이므로 [요청] 생략.
-        if !input.isEmpty { parts.append("[요청]\n\(input)") }
+        if !input.isEmpty { parts.append(L("prompt.sectionRequest") + "\n\(input)") }
         return parts.joined(separator: "\n\n")
     }
 }

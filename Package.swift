@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "AnywhereLLM",
+    defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "LLMCore", path: "Sources/LLMCore"),
