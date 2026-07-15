@@ -1,5 +1,5 @@
 APP_NAME    = AnywhereLLM
-VERSION     = 0.1.0
+VERSION     = 0.2.0
 BUNDLE_ID   = kr.scian0204.AnywhereLLM
 BUILD_DIR   = build
 APP_BUNDLE  = $(BUILD_DIR)/$(APP_NAME).app
