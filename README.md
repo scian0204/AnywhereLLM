@@ -15,6 +15,8 @@ then types the LLM response into the focused text box in real time — or replac
 ![API](https://img.shields.io/badge/API-OpenAI%20compatible-412991?logo=openai&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
+**[🌐 Website](https://scian0204.github.io/AnywhereLLM/)**
+
 <img src="docs/assets/demo-replace.gif" width="760" alt="Selection replace demo — select a Korean draft, hit the hotkey, and it is instantly replaced with the English translation">
 
 *Select the Korean draft you typed in a messenger input, press <kbd>⌘⇧Space</kbd> → <kbd>⏎</kbd> — the translation replaces it in place.*
