@@ -75,8 +75,9 @@ enum TextTargetService {
                 // 텍스트를 선택해도 컴포저가 포커스를 쥔다 (실측: progress/20) —
                 // 선택이 포커스 요소 밖 = 삽입 대상 아님 → 보기 전용 컨텍스트.
                 // axElement는 웹 영역: 패널 앵커(선택 위치 텍스트마커 bounds)용.
-                // 웹 영역이 "선택 없음"이면 그대로 믿는다 — 여기서 ⌘C를 쏘면
-                // 줄 복사 에디터(VS Code 등)의 빈 선택 오탐이 부활한다.
+                // 웹 영역이 "선택 없음"이어도 끝이 아니다 — 메타데이터 판별 ⌘C
+                // 프로브(아래)만 허용. 결과 문자열을 무조건 채택하는 ⌘C는 여전히
+                // 금지 — 줄 복사 에디터(VS Code 등)의 빈 선택 오탐이 부활한다.
                 let webSelection = stringAttribute(webArea, kAXSelectedTextAttribute as CFString)
                 NSLog("AnywhereLLM capture: webArea found, webSelLen=%@",
                       webSelection.map { String($0.count) } ?? "nil")
@@ -86,6 +87,14 @@ enum TextTargetService {
                                          isSecureField: false, isEditable: false,
                                          axElement: webArea)
                 }
+                // Monaco류(VS Code 등): 에디터 선택이 AX 어디에도 안 나온다 — 히든
+                // textarea는 selLen=0·rangeLen=0, 웹 영역 selectedText도 nil (실측:
+                // progress/30). 유일한 신호가 ⌘C인데 빈 선택 ⌘C = 줄 복사라 결과
+                // 문자열만으론 구분 불가 → 클립보드 메타데이터(isFromEmptySelection)가
+                // "진짜 선택"을 확정할 때만 채택. 메타데이터 없는 웹 앱은 전부 폐기 —
+                // 줄 복사 오탐 차단(progress/21)은 그대로 유지된다.
+                selected = clipboardCopyFallback(timeout: 0.15, requireWebEditorSelectionMetadata: true)
+                NSLog("AnywhereLLM capture: web editor metadata probe (len %d)", selected?.count ?? -1)
             } else if full == nil {
                 // AX가 아예 침묵(full도 없음)하는 앱 → ⌘C 폴백, 요소 소속 선택으로
                 // 간주 (레거시 — 이런 앱은 요소 상태를 알 길이 없다).
@@ -318,17 +327,58 @@ enum TextTargetService {
     /// the copied string, then restores the original pasteboard. Returns nil if
     /// nothing was copied within the timeout. 투기적 프로브(선택이 없을 확률이
     /// 높은 경로)는 짧은 timeout으로 핫키 지연을 줄인다.
-    private static func clipboardCopyFallback(timeout: TimeInterval = 0.3) -> String? {
+    ///
+    /// `requireWebEditorSelectionMetadata`: Chromium 웹 에디터의 클립보드 메타데이터
+    /// (web-custom-data 안 vscode-editor-data JSON, UTF-16LE)가 "빈 선택 아님"을
+    /// 확정할 때만 결과를 반환. VS Code류는 빈 선택 ⌘C가 현재 줄을 복사하므로
+    /// (isFromEmptySelection=true) 이 판별자 없이는 진짜 선택과 구분할 수 없다.
+    private static func clipboardCopyFallback(timeout: TimeInterval = 0.3,
+                                              requireWebEditorSelectionMetadata: Bool = false) -> String? {
         let pb = NSPasteboard.general
         let backup = backupPasteboard(pb)
         let before = pb.changeCount
 
         sendKey(0x08, command: true) // 'c'
 
-        let copied = waitForChange(pb, from: before, timeout: timeout) ? pb.string(forType: .string) : nil
+        var copied = waitForChange(pb, from: before, timeout: timeout) ? pb.string(forType: .string) : nil
 
-        restorePasteboard(pb, items: backup)
+        if requireWebEditorSelectionMetadata, copied != nil {
+            // 주의: 이 메타데이터는 웹 콘텐츠가 쓰는 값이라 신뢰 수준은 "VS Code류의
+            // 자기 신고"다 — 악의적 페이지는 위조 가능하지만, 채택된 텍스트는 패널에
+            // 그대로 보이고 자동 적용되지 않으므로 영향은 컨텍스트 오염에 그친다.
+            // ponytail: 메타데이터가 없거나 형식이 바뀌면 미탐(폐기) — 오탐(줄 복사를
+            // 선택으로 승격)보다 안전한 방향. Docs/CodeMirror류 미지원, 사례 나오면 판별자 추가.
+            if !pasteboardHasWebEditorMetadata(pb, needle: "isFromEmptySelection\":false") {
+                copied = nil
+            }
+        }
+
+        // 클립보드가 안 변했으면(⌘C 무반응) 복원도 불필요 — 복원 자체가 changeCount를
+        // 올려 클립보드 매니저에 중복 항목을 남기고 promise 데이터를 강제 해소시킨다.
+        if pb.changeCount != before {
+            restorePasteboard(pb, items: backup)
+
+            if requireWebEditorSelectionMetadata {
+                // 레이스: 대상 앱의 복사가 타임아웃 뒤 늦게 도착하면 방금 복원한
+                // 클립보드를 덮는다. 프로브 잔여물은 웹 에디터 메타데이터로 식별
+                // 가능하므로 잠시 후 감지되면 한 번 더 복원 (사용자 클립보드 보존).
+                let restoredCount = pb.changeCount
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    if pb.changeCount != restoredCount,
+                       pasteboardHasWebEditorMetadata(pb, needle: "isFromEmptySelection") {
+                        restorePasteboard(pb, items: backup)
+                    }
+                }
+            }
+        }
         return copied
+    }
+
+    /// `org.chromium.web-custom-data` blob(UTF-16LE) 안에 needle이 있는지.
+    private static func pasteboardHasWebEditorMetadata(_ pb: NSPasteboard, needle: String) -> Bool {
+        guard let blob = pb.data(forType: NSPasteboard.PasteboardType("org.chromium.web-custom-data")),
+              let bytes = needle.data(using: .utf16LittleEndian) else { return false }
+        return blob.range(of: bytes) != nil
     }
 
     private static func waitForChange(_ pb: NSPasteboard, from before: Int, timeout: TimeInterval) -> Bool {
