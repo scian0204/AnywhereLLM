@@ -136,8 +136,8 @@ footer .links a{margin:0 .7rem}
     <span data-ko="하나로 포커스를 뺏지 않는 패널을 띄우고, LLM 응답을 포커스된 텍스트박스에 실시간 타이핑하거나 선택한 텍스트를 그 자리에서 교체합니다 — 창 전환도, 복사-붙여넣기 왕복도 없이.">opens a panel that never steals focus. Responses type live into the focused text field, or replace the selected text in place — no window switching, no copy-paste round trips.</span>
   </p>
   <div class="install">
-    <div class="cmdbox"><pre><code id="cmd">brew install --cask --no-quarantine scian0204/tap/anywherellm</code></pre><button id="copy" type="button" data-ko="복사">Copy</button></div>
-    <p class="note"><code>--no-quarantine</code><span data-ko=" — Apple 공증 없이 자가서명으로 배포되는 앱이라, 이 플래그가 없으면 macOS가 “손상된 앱”으로 차단합니다."> — the app is self-signed without Apple notarization; without this flag, Gatekeeper blocks it as a “damaged” app.</span></p>
+    <div class="cmdbox"><pre><code id="cmd">brew install --cask scian0204/tap/anywherellm</code></pre><button id="copy" type="button" data-ko="복사">Copy</button></div>
+    <p class="note"><span data-ko="Apple 공증 없이 자가서명으로 배포되는 앱 — 설치 과정에서 격리(quarantine) 속성이 자동 제거됩니다.">Self-signed without Apple notarization — the quarantine attribute is removed automatically during install.</span></p>
   </div>
   <div class="hero-img">
     <img class="shot" src="assets/hero.png" alt="AnywhereLLM panel floating over the target app" width="820">

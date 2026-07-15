@@ -68,11 +68,11 @@ Select text that has nowhere to insert into — someone else's message, a web pa
 ### Homebrew (recommended)
 
 ```bash
-brew install --cask --no-quarantine scian0204/tap/anywherellm
+brew install --cask scian0204/tap/anywherellm
 ```
 
-> **Why `--no-quarantine` is needed** — the app ships without Apple notarization,
-> so with the quarantine attribute set, macOS blocks it as a "damaged" app. Already installed and blocked?
+> **Note** — the app ships self-signed without Apple notarization; the cask removes
+> the quarantine attribute automatically during install. If macOS still blocks it as "damaged":
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/AnywhereLLM.app
 > ```
