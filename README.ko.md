@@ -146,13 +146,13 @@ make run        # 빌드 후 실행
 | `ConversationController/View` | 삽입/교체/보기 전용 UX 분기, 멀티턴 대화 |
 | `LLMClient` | SSE 스트리밍 클라이언트 (`URLSession.bytes`) |
 | `KeychainStore` | API 키 키체인 보관 |
-| `LLMCore` (라이브러리) | SSE 파서·think 태그 필터 — 단위 테스트 대상 |
+| `LLMCore` (라이브러리) | SSE 파서·think 태그 필터·엔드포인트 URL 조합/origin 추출·Ollama 네이티브 NDJSON 파서 — 단위 테스트 대상 |
 
 타겟은 2개입니다: 실행 파일 `AnywhereLLM`과, 테스트 가능한 순수 로직만 분리한 `LLMCore`.
 설계 결정과 근거는 [docs/PLAN.md](docs/PLAN.md), 단계별 구현 기록(실측 노트 포함)은 [docs/progress/](docs/progress/)에 있습니다.
 
 ```bash
-swift test      # LLMCore 단위 테스트 (SSEParser, ThinkTagFilter)
+swift test      # LLMCore 단위 테스트 (SSEParser, ThinkTagFilter, Endpoint, OllamaChatParser)
 ```
 
 ## 보안에 대하여

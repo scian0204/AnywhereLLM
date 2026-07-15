@@ -107,12 +107,12 @@ make run        # build, then run
 
 ## Quick Start
 
-*(The app UI is currently Korean — Korean labels below are quoted as shown in the app.)*
+*(The app UI follows your system language — English or Korean.)*
 
 <img src="docs/assets/settings.png" width="380" align="right" alt="Settings window — Base URL, model, think mode, prompt profiles">
 
-1. Menu bar icon → **설정** (Settings) — enter the Base URL, model, and API key
-   (for Ollama: `http://localhost:11434/v1` + click **모델 가져오기** (Fetch Models))
+1. Menu bar icon → **Settings** — enter the Base URL, model, and API key
+   (for Ollama: `http://localhost:11434/v1` + click **Fetch Models**)
 2. Put the cursor in any app's text box and press <kbd>⌘⇧Space</kbd>
 3. Type a request → <kbd>⏎</kbd> — the response is typed right where your cursor is
 4. Invoke **with text selected** for replace mode — the profile acts as the instruction, so an empty <kbd>⏎</kbd> is enough to send
@@ -148,13 +148,13 @@ make run        # build, then run
 | `ConversationController/View` | Insert/replace/view-only UX branching, multi-turn conversation |
 | `LLMClient` | SSE streaming client (`URLSession.bytes`) |
 | `KeychainStore` | Keychain storage for the API key |
-| `LLMCore` (library) | SSE parser and think-tag filter — the unit-tested part |
+| `LLMCore` (library) | SSE parser, think-tag filter, endpoint resolution, and Ollama chat parser — the unit-tested part |
 
 There are two targets: the `AnywhereLLM` executable, and `LLMCore`, which isolates just the testable pure logic.
 Design decisions and their rationale live in [docs/PLAN.md](docs/PLAN.md); step-by-step implementation notes (including real-world measurements) are in [docs/progress/](docs/progress/).
 
 ```bash
-swift test      # LLMCore unit tests (SSEParser, ThinkTagFilter)
+swift test      # LLMCore unit tests (SSEParser, ThinkTagFilter, Endpoint, OllamaChatParser)
 ```
 
 ## Security
