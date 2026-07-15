@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>AnywhereLLM — LLM in any text field on macOS</title>
+<meta name="description" content="macOS menubar app. Press ⌘⇧Space in any app to open a focus-preserving panel that types LLM responses into the focused text field, or replaces the selected text in place.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://scian0204.github.io/AnywhereLLM/">
+<meta property="og:title" content="AnywhereLLM — LLM in any text field on macOS">
+<meta property="og:description" content="One global hotkey opens a panel that never steals focus. LLM responses type live into the focused text field, or replace your selection — clipboard untouched.">
+<meta property="og:image" content="https://scian0204.github.io/AnywhereLLM/assets/hero.png">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0e1116; --bg2:#151a21; --fg:#e6e9ef; --muted:#98a3b3;
+  --border:#262e39; --accent:#6c8cff; --code-bg:#0a0d12; --nav-bg:rgba(14,17,22,.82);
+}
+@media (prefers-color-scheme: light){
+  :root{
+    color-scheme:light;
+    --bg:#fafafa; --bg2:#ffffff; --fg:#1c2128; --muted:#57606a;
+    --border:#dde3e9; --accent:#3b5bdb; --code-bg:#f0f2f5; --nav-bg:rgba(250,250,250,.85);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+img{max-width:100%;height:auto;display:block}
+kbd{
+  font-family:inherit; font-size:.85em; padding:.12em .45em;
+  border:1px solid var(--border); border-bottom-width:2px; border-radius:5px;
+  background:var(--bg2); white-space:nowrap;
+}
+code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em;
+  background:var(--code-bg); border:1px solid var(--border);
+  border-radius:5px; padding:.1em .35em;
+}
+.wrap{max-width:960px;margin:0 auto;padding:0 1.25rem}
+
+nav{
+  position:sticky; top:0; z-index:10;
+  background:var(--nav-bg); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+}
+nav .wrap{display:flex;align-items:center;gap:1rem;height:3.25rem}
+nav .brand{font-weight:700;color:var(--fg)}
+nav .spacer{flex:1}
+nav a{color:var(--muted);font-size:.9rem}
+#lang{
+  font:inherit; font-size:.78rem; font-weight:600; letter-spacing:.03em;
+  color:var(--muted); background:none; border:1px solid var(--border);
+  border-radius:6px; padding:.2rem .55rem; cursor:pointer;
+}
+#lang:hover{color:var(--fg);border-color:var(--muted)}
+
+header{text-align:center;padding:4.5rem 0 3.5rem}
+header h1{font-size:clamp(2.1rem,6vw,3rem);letter-spacing:-.02em}
+header .tagline{font-size:clamp(1.05rem,3vw,1.3rem);color:var(--accent);margin:.6rem 0 1rem;font-weight:600}
+header .sub{color:var(--muted);max-width:38rem;margin:0 auto 2rem}
+.install{max-width:34rem;margin:0 auto 1rem;text-align:left}
+.install pre{
+  position:relative; background:var(--code-bg); border:1px solid var(--border);
+  border-radius:10px; padding:.9rem 5.2rem .9rem 1rem; overflow-x:auto;
+}
+.install pre code{background:none;border:none;padding:0;font-size:.88rem}
+#copy{
+  position:absolute; top:.55rem; right:.55rem;
+  font:inherit; font-size:.75rem; color:var(--fg);
+  background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+  padding:.25rem .6rem; cursor:pointer;
+}
+#copy:hover{border-color:var(--accent)}
+.install .note{font-size:.82rem;color:var(--muted);margin-top:.6rem}
+.hero-img{margin:2.5rem auto 0;max-width:820px}
+.shot{border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+
+section{padding:3.5rem 0}
+h2{font-size:1.6rem;letter-spacing:-.01em;margin-bottom:2rem;text-align:center}
+
+.demo{display:flex;align-items:center;gap:2.5rem;margin-bottom:3.5rem}
+.demo:last-child{margin-bottom:0}
+.demo:nth-child(odd){flex-direction:row-reverse}
+.demo .txt{flex:1;min-width:0}
+.demo .txt h3{font-size:1.15rem;margin-bottom:.5rem}
+.demo .txt h3 span:first-child{color:var(--accent)}
+.demo .txt p{color:var(--muted);font-size:.95rem}
+.demo .pic{flex:1.5;min-width:0}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.2rem}
+.card h4{font-size:.98rem;margin-bottom:.35rem}
+.card p{font-size:.87rem;color:var(--muted)}
+
+.quick{display:flex;align-items:flex-start;gap:2.5rem}
+.quick ol{flex:1.3;min-width:0;padding-left:1.3rem;color:var(--muted)}
+.quick ol li{margin-bottom:.8rem}
+.quick .pic{flex:1;min-width:0;max-width:360px}
+
+footer{border-top:1px solid var(--border);padding:2rem 0 3rem;text-align:center;color:var(--muted);font-size:.88rem}
+footer .links{margin-bottom:.5rem}
+footer .links a{margin:0 .7rem}
+
+@media (max-width:720px){
+  .demo,.demo:nth-child(odd),.quick{flex-direction:column}
+  .quick .pic{max-width:100%}
+  header{padding:3rem 0 2.5rem}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <span class="brand">AnywhereLLM</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/scian0204/AnywhereLLM">GitHub</a>
+    <button id="lang" type="button" aria-label="Switch language">KO</button>
+  </div>
+</nav>
+
+<header class="wrap">
+  <h1>AnywhereLLM</h1>
+  <p class="tagline" data-ko="어떤 앱이든, 지금 커서가 있는 그 자리에서 LLM을.">LLM at your cursor — in any app.</p>
+  <p class="sub">
+    <span data-ko="글로벌 핫키">One global hotkey</span>
+    <kbd>⌘⇧Space</kbd>
+    <span data-ko="하나로 포커스를 뺏지 않는 패널을 띄우고, LLM 응답을 포커스된 텍스트박스에 실시간 타이핑하거나 선택한 텍스트를 그 자리에서 교체합니다 — 창 전환도, 복사-붙여넣기 왕복도 없이.">opens a panel that never steals focus. Responses type live into the focused text field, or replace the selected text in place — no window switching, no copy-paste round trips.</span>
+  </p>
+  <div class="install">
+    <pre><code id="cmd">brew install --cask --no-quarantine scian0204/tap/anywherellm</code><button id="copy" type="button" data-ko="복사">Copy</button></pre>
+    <p class="note"><code>--no-quarantine</code><span data-ko=" — Apple 공증 없이 자가서명으로 배포되는 앱이라, 이 플래그가 없으면 macOS가 “손상된 앱”으로 차단합니다."> — the app is self-signed without Apple notarization; without this flag, Gatekeeper blocks it as a “damaged” app.</span></p>
+  </div>
+  <div class="hero-img">
+    <img class="shot" src="assets/hero.png" alt="AnywhereLLM panel floating over the target app" width="820">
+  </div>
+</header>
+
+<section class="wrap" id="demos">
+  <h2 data-ko="세 가지 모드, 자동 선택">Three modes, chosen automatically</h2>
+
+  <div class="demo">
+    <div class="txt">
+      <h3><span data-ko="삽입">Insert</span> <span data-ko="— 응답이 실시간으로 타이핑">— responses type live</span></h3>
+      <p data-ko="빈 입력창에 커서를 두고 패널에 요청을 입력하면, 응답이 도착하는 대로 대상 앱에 스트리밍 타이핑됩니다.">Put the cursor in an empty text field and type a request in the panel. The response streams into the target app as it arrives, typed character by character.</p>
+    </div>
+    <div class="pic"><img class="shot" src="assets/demo-insert.gif" loading="lazy" alt="Insert demo — response streaming into a chat input" width="560"></div>
+  </div>
+
+  <div class="demo">
+    <div class="txt">
+      <h3><span data-ko="교체">Replace</span> <span data-ko="— 선택한 텍스트를 결과로">— selection becomes the result</span></h3>
+      <p data-ko="텍스트를 선택한 채 호출하면 패널에서 원문과 결과를 확인하고, 완료 시 선택 영역이 자동 교체됩니다. 멀티턴 대화로 다듬은 뒤 반영할 수도 있습니다.">Invoke with text selected: review the original and the result in the panel, and the selection is replaced when done. Refine over multiple turns before applying.</p>
+    </div>
+    <div class="pic"><img class="shot" src="assets/demo-replace.gif" loading="lazy" alt="Replace demo — selected Korean draft replaced with English translation" width="560"></div>
+  </div>
+
+  <div class="demo">
+    <div class="txt">
+      <h3><span data-ko="읽기">Read</span> <span data-ko="— 편집 불가 영역은 패널에서">— view-only stays in the panel</span></h3>
+      <p data-ko="상대방 메시지·웹 본문·PDF처럼 삽입할 곳이 없는 텍스트를 선택하면, 결과를 패널에 남겨 보여줍니다.">Select text with nowhere to insert into — a received message, a web article, a PDF — and the result is shown and kept in the panel instead.</p>
+    </div>
+    <div class="pic"><img class="shot" src="assets/demo-viewonly.gif" loading="lazy" alt="Read demo — received message translated in the panel" width="560"></div>
+  </div>
+</section>
+
+<section class="wrap" id="features">
+  <h2 data-ko="주요 기능">Features</h2>
+  <div class="grid">
+    <div class="card">
+      <h4 data-ko="포커스 무손실 패널">Focus-preserving panel</h4>
+      <p data-ko="비활성 NSPanel 기반 — 패널에 타이핑하는 동안에도 대상 앱의 포커스·커서·선택이 그대로 살아 있습니다.">Built on a non-activating NSPanel: the target app stays frontmost — focus, cursor, and selection intact — even while you type in the panel.</p>
+    </div>
+    <div class="card">
+      <h4 data-ko="글로벌 핫키">Global hotkey</h4>
+      <p data-ko="기본 ⌘⇧Space, 설정에서 변경 가능. 스트리밍 중 재입력하면 취소됩니다.">⌘⇧Space by default, configurable in settings. Press again mid-stream to cancel.</p>
+    </div>
+    <div class="card">
+      <h4 data-ko="UX 자동 분기">Automatic UX branching</h4>
+      <p data-ko="접근성(AX) API로 편집 가능성과 선택 유무를 판정해 삽입·교체·보기 전용을 자동 선택합니다.">Editability and selection are detected via the Accessibility API to pick insert, replace, or view-only — no mode switch to think about.</p>
+    </div>
+    <div class="card">
+      <h4 data-ko="클립보드 무접촉">Clipboard untouched</h4>
+      <p data-ko="AX 삽입 우선, 실패 시 유니코드 키 이벤트 합성 타이핑 — 복사 버퍼를 더럽히지 않습니다.">Writes use AX insertion or synthesized Unicode key events — your copy buffer is never dirtied.</p>
+    </div>
+    <div class="card">
+      <h4 data-ko="OpenAI 호환 API">OpenAI-compatible API</h4>
+      <p data-ko="chat completions SSE 스트리밍. Ollama·LM Studio·vLLM 등 로컬 서버도 지원합니다.">Chat completions with SSE streaming. Works with local servers too: Ollama, LM Studio, vLLM.</p>
+    </div>
+    <div class="card">
+      <h4 data-ko="think 모드 처리">Think-mode handling</h4>
+      <p data-ko="reasoning 모델의 &lt;think&gt; 출력을 요청 단계에서 끄고, 출력 필터로 한 번 더 차단합니다.">Reasoning models' &lt;think&gt; output is disabled at request time and filtered once more on the way out.</p>
+    </div>
+    <div class="card">
+      <h4 data-ko="프롬프트 프로필">Prompt profiles</h4>
+      <p data-ko="번역·요약·교정 등 용도별 시스템 프롬프트를 저장하고 패널에서 ⌘P로 즉시 전환합니다.">Save per-purpose system prompts — translate, summarize, proofread — and switch instantly with ⌘P inside the panel.</p>
+    </div>
+    <div class="card">
+      <h4 data-ko="보안 우선">Security first</h4>
+      <p data-ko="비밀번호 필드 감지 시 캡처·삽입·클립보드 폴백 전부 차단(해제 불가). API 키는 키체인에 저장됩니다.">Password fields are fully blocked — capture, insertion, clipboard fallback — and this cannot be disabled. API keys live in the macOS Keychain.</p>
+    </div>
+    <div class="card">
+      <h4 data-ko="의존성 0">Zero dependencies</h4>
+      <p data-ko="외부 패키지 없이 AppKit + SwiftUI만 사용합니다.">AppKit + SwiftUI only. No external packages, nothing phoning home.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="quickstart">
+  <h2 data-ko="빠른 시작">Quick start</h2>
+  <div class="quick">
+    <ol>
+      <li data-ko="메뉴바 아이콘 → 설정 — Base URL·모델·API 키 입력 (Ollama라면 http://localhost:11434/v1 + 모델 가져오기 클릭).">Menubar icon → 설정 (Settings) — enter Base URL, model, and API key (for Ollama: http://localhost:11434/v1, then click 모델 가져오기 / Fetch Models).</li>
+      <li data-ko="아무 앱의 텍스트박스에 커서를 두고 ⌘⇧Space.">Put the cursor in any app's text field and press ⌘⇧Space.</li>
+      <li data-ko="요청 입력 → ⏎ — 응답이 그 자리에 타이핑됩니다. 텍스트를 선택한 채 호출하면 교체 모드.">Type a request and press ⏎ — the response types right there. Invoke with text selected for replace mode.</li>
+      <li data-ko="⌘P로 패널 안에서 프롬프트 프로필(번역·요약·교정…) 전환, Esc로 닫기.">⌘P switches prompt profiles (translate, summarize, proofread…) inside the panel; Esc closes it.</li>
+    </ol>
+    <div class="pic"><img class="shot" src="assets/settings.png" loading="lazy" alt="Settings window — Base URL, model, think mode, prompt profiles" width="360"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="links">
+      <a href="https://github.com/scian0204/AnywhereLLM">GitHub</a>
+      <a href="https://github.com/scian0204/AnywhereLLM/blob/main/LICENSE" data-ko="MIT 라이선스">MIT License</a>
+      <a href="https://github.com/scian0204/AnywhereLLM#build-from-source" data-ko="소스 빌드">Build from source</a>
+    </p>
+    <p data-ko="macOS 14 (Sonoma) 이상 · Swift 6 · 손쉬운 사용(Accessibility) 권한 필요">macOS 14 (Sonoma) or later · Swift 6 · requires Accessibility permission</p>
+  </div>
+</footer>
+
+<script>
+const langBtn = document.getElementById('lang');
+const i18nEls = document.querySelectorAll('[data-ko]');
+i18nEls.forEach(el => { el.dataset.en = el.textContent; });
+function setLang(l){
+  i18nEls.forEach(el => { el.textContent = el.dataset[l]; });
+  document.documentElement.lang = l;
+  langBtn.textContent = l === 'en' ? 'KO' : 'EN';
+  localStorage.setItem('lang', l);
+}
+langBtn.addEventListener('click', () => setLang(document.documentElement.lang === 'en' ? 'ko' : 'en'));
+setLang(localStorage.getItem('lang') === 'ko' ? 'ko' : 'en');
+
+document.getElementById('copy').addEventListener('click', function(){
+  navigator.clipboard.writeText(document.getElementById('cmd').textContent);
+  this.textContent = document.documentElement.lang === 'ko' ? '복사됨' : 'Copied';
+  setTimeout(() => setLang(document.documentElement.lang), 1500);
+});
+</script>
+
+</body>
+</html>
