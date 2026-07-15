@@ -2,6 +2,8 @@
 
 **English** | [한국어](README.ko.md)
 
+<img src="docs/assets/icon.png" width="128" alt="AnywhereLLM app icon">
+
 # AnywhereLLM
 
 **Any app, right where your cursor is — that's where the LLM works.**

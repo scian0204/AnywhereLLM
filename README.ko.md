@@ -2,6 +2,8 @@
 
 [English](README.md) | **한국어**
 
+<img src="docs/assets/icon.png" width="128" alt="AnywhereLLM 앱 아이콘">
+
 # AnywhereLLM
 
 **어떤 앱이든, 지금 커서가 있는 그 자리에서 LLM을.**
