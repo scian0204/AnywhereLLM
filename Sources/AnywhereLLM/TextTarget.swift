@@ -21,6 +21,11 @@ struct TargetContext {
 /// and no clipboard fallback runs.
 enum TextTargetService {
 
+    /// 패널을 숨긴 뒤 대상 앱으로 key 포커스가 돌아오기까지 기다리는 시간.
+    /// 삽입 확정(PromptPanel.apply)과 스트리밍 첫 타이핑(ConversationController)이 공유 —
+    /// 두 곳에 흩어진 리터럴이 과거에 어긋난 적이 있어 한 상수로 묶는다.
+    static let focusReturnDelay: TimeInterval = 0.15
+
     // MARK: - Capture
 
     static func captureContext() -> TargetContext {
@@ -135,14 +140,18 @@ enum TextTargetService {
 
         // Try AX first: setting kAXSelectedTextAttribute replaces the selection
         // (or inserts at caret when empty) in apps that support it.
-        if let element = context.axElement, setSelectedTextVerified(element, text) {
+        // 하드 룰: 캡처 후 패널이 열린 사이 요소가 보안 필드로 바뀌었을 수 있다 —
+        // AX 쓰기 직전 재확인(typeText와 대칭). 재확인 실패면 typeText로 떨어져
+        // 거기서 다시 확인한다.
+        if let element = context.axElement, !isSecureField(element),
+           setSelectedTextVerified(element, text) {
             return
         }
 
         // AX 실패 또는 무시(Chromium은 success를 반환하고 조용히 무시 — 실측:
         // docs/progress/18). 이때 대상의 선택은 그대로 살아 있으므로 유니코드
         // 타이핑이 선택을 자연스럽게 대체한다. 삽입 모드에서 검증된 경로와 동일.
-        typeText(text)
+        typeText(text, expectedBundleId: context.bundleId)
     }
 
     // MARK: - AX helpers
@@ -357,19 +366,16 @@ enum TextTargetService {
         // 올려 클립보드 매니저에 중복 항목을 남기고 promise 데이터를 강제 해소시킨다.
         if pb.changeCount != before {
             restorePasteboard(pb, items: backup)
-
-            if requireWebEditorSelectionMetadata {
-                // 레이스: 대상 앱의 복사가 타임아웃 뒤 늦게 도착하면 방금 복원한
-                // 클립보드를 덮는다. 프로브 잔여물은 웹 에디터 메타데이터로 식별
-                // 가능하므로 잠시 후 감지되면 한 번 더 복원 (사용자 클립보드 보존).
-                let restoredCount = pb.changeCount
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    if pb.changeCount != restoredCount,
-                       pasteboardHasWebEditorMetadata(pb, needle: "isFromEmptySelection") {
-                        restorePasteboard(pb, items: backup)
-                    }
-                }
-            }
+        }
+        // 레이스: 대상 앱이 타임아웃 뒤 늦게 ⌘C를 처리하면(Electron 등 메인 스레드가
+        // >150ms 멈추는 앱) 방금 복원했거나 손대지 않은 클립보드를 프로브 결과가
+        // 덮어 사용자 원본(패스워드 등)이 영구 유실된다. 프로브 발사 뒤 짧은 창을 두고,
+        // 그 사이 클립보드가 바뀌면 한 번 더 복원한다. 핫키 직후 ~0.4s 내 변경은
+        // 사실상 이 늦은 복사뿐이라 사용자의 정상 복사를 되돌릴 위험은 낮다.
+        // (기존 메타데이터-전용 늦은복원을 모든 프로브 경로로 일반화.)
+        let settled = pb.changeCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            if pb.changeCount != settled { restorePasteboard(pb, items: backup) }
         }
         return copied
     }
@@ -418,8 +424,19 @@ enum TextTargetService {
     /// no clipboard, no AX. Used for streaming insert so chunks land as they arrive.
     /// 주의: 합성 키 이벤트는 시스템의 key window로 간다. 패널이 key인 채로 부르면
     /// 패널이 이벤트를 먹는다 — 호출 전에 패널을 숨겨 대상 앱에 key를 돌려줄 것.
-    static func typeText(_ text: String) {
+    ///
+    /// `expectedBundleId`: 캡처 시점의 대상 앱. frontmost가 이것과 다르면 사용자가
+    /// 도중에 다른 앱으로 전환한 것 — 아무 것도 타이핑하지 않는다. 스트리밍은 매
+    /// flush마다 이 검사를 거치므로 전환 즉시 멈춘다. (보안 필드 재확인은 AX가
+    /// 침묵하는 앱에선 무력하므로, 이 앱-단위 가드가 오삽입의 1차 방어선이다.)
+    static func typeText(_ text: String, expectedBundleId: String? = nil) {
         guard !text.isEmpty else { return }
+        // 대상 앱이 여전히 frontmost인지 확인 — 아니면 엉뚱한 앱에 타이핑된다
+        // (long 스트림 중 앱 전환, 비활성 패널 위에서 다른 앱 클릭 후 apply 등).
+        if let expectedBundleId,
+           NSWorkspace.shared.frontmostApplication?.bundleIdentifier != expectedBundleId {
+            return
+        }
         // 하드 룰: 캡처 이후 포커스가 보안 필드로 옮겨졌을 수 있다 — 타이핑 직전 재확인,
         // 보안 필드면 무조건 드롭 (설정으로 풀 수 없음).
         if let focused = focusedElement(), isSecureField(focused) { return }
@@ -427,8 +444,17 @@ enum TextTargetService {
         // truncates very long strings. Bump if a target drops characters.
         let units = Array(text.utf16)
         let source = CGEventSource(stateID: .privateState)
-        for start in stride(from: 0, to: units.count, by: 20) {
-            var slice = Array(units[start..<min(start + 20, units.count)])
+        var start = 0
+        while start < units.count {
+            var end = min(start + 20, units.count)
+            // 청크가 상위 서로게이트로 끝나면 짝(하위 서로게이트)이 다음 청크로 밀려
+            // 두 이벤트 모두 깨진 UTF-16을 실어 이모지가 U+FFFD로 망가진다 — 경계를
+            // 한 칸 당겨 서로게이트 쌍이 한 이벤트 안에 남게 한다.
+            if end < units.count, (0xD800...0xDBFF).contains(units[end - 1]) {
+                end -= 1
+            }
+            var slice = Array(units[start..<end])
+            start = end
             guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
                   let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
             else { continue }

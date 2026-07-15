@@ -169,9 +169,9 @@ struct ConversationView: View {
     }
 
     private func send() {
-        let text = input
-        input = ""
-        controller.send(text)
+        // 수락됐을 때만 입력을 비운다 — 스트리밍 중(또는 빈 요청)엔 controller.send가
+        // 거부하므로, 먼저 비우면 사용자가 친 다음 지시가 흔적 없이 사라진다.
+        if controller.send(input) { input = "" }
     }
 }
 

@@ -43,6 +43,11 @@ struct SettingsView: View {
                 SecureField(L("settings.apiKey"), text: $apiKey)
                     .onSubmit { KeychainStore.set(apiKey) }
                     .onChange(of: apiKey) { _, new in KeychainStore.set(new) }
+                if showCleartextKeyWarning {
+                    Text(L("settings.cleartextKeyWarning"))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
 
                 HStack {
                     TextField(L("settings.model"), text: $model)
@@ -263,6 +268,17 @@ struct SettingsView: View {
 
     private var hotkeyDisplay: String {
         modifierSymbols(hotkeyModifiers) + keyName(hotkeyKeyCode)
+    }
+
+    /// 평문 http로 loopback이 아닌 호스트(LAN LiteLLM/프록시 등)에 API 키를 보내면
+    /// 같은 네트워크의 누구나 스니핑할 수 있다. ATS는 IP 리터럴/.local을 예외 처리하므로
+    /// OS가 막지 않는다 — 키가 있고 위험 구성일 때만 경고를 띄운다.
+    private var showCleartextKeyWarning: Bool {
+        guard !apiKey.isEmpty,
+              let url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme?.lowercased() == "http",
+              let host = url.host?.lowercased() else { return false }
+        return !["127.0.0.1", "localhost", "::1"].contains(host)
     }
 }
 

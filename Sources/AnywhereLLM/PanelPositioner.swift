@@ -25,7 +25,9 @@ enum PanelPositioner {
         case "mouse":
             anchor = NSRect(origin: NSEvent.mouseLocation, size: .zero)
         case "center":
-            let screen = screenForMouse()
+            guard let screen = screenForMouse() else {
+                return NSEvent.mouseLocation // 화면 없음 — 마우스 위치로 폴백
+            }
             return NSPoint(
                 x: screen.frame.midX - size.width / 2,
                 y: screen.frame.midY - size.height / 2
@@ -67,7 +69,7 @@ enum PanelPositioner {
     private static func caretRect(of element: AXUIElement) -> NSRect? {
         var rangeValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
-              let rangeValue
+              let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID()
         else { return nil }
 
         var range = CFRange()
@@ -79,7 +81,7 @@ enum PanelPositioner {
         var boundsValue: CFTypeRef?
         guard AXUIElementCopyParameterizedAttributeValue(
             element, kAXBoundsForRangeParameterizedAttribute as CFString, caretRangeValue, &boundsValue
-        ) == .success, let boundsValue else { return nil }
+        ) == .success, let boundsValue, CFGetTypeID(boundsValue) == AXValueGetTypeID() else { return nil }
 
         var rect = CGRect.zero
         guard AXValueGetValue((boundsValue as! AXValue), .cgRect, &rect) else { return nil }
@@ -116,7 +118,8 @@ enum PanelPositioner {
 
     private static func axRect(_ element: AXUIElement, _ attribute: CFString) -> CGRect? {
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success, let value else { return nil }
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
         var rect = CGRect.zero
         guard AXValueGetValue((value as! AXValue), .cgRect, &rect) else { return nil }
         return rect
@@ -132,17 +135,20 @@ enum PanelPositioner {
         return NSRect(x: rect.origin.x, y: flippedY, width: rect.width, height: rect.height)
     }
 
-    private static func screenForMouse() -> NSScreen {
+    /// nil = 연결된 화면이 하나도 없음(헤드리스/전체 절전·재구성 중). screens[0]
+    /// 직접 인덱싱은 그 순간 out-of-range 크래시라 옵셔널로 반환해 호출부가 폴백한다.
+    private static func screenForMouse() -> NSScreen? {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
             ?? NSScreen.main
-            ?? NSScreen.screens[0]
+            ?? NSScreen.screens.first
     }
 
     /// Keep the panel fully on the screen it lands on (visibleFrame excludes menu bar/Dock).
     private static func clamp(_ origin: inout NSPoint, size: NSSize) {
         let rect = NSRect(origin: origin, size: size)
-        let screen = NSScreen.screens.first { $0.frame.intersects(rect) } ?? screenForMouse()
+        guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(rect) }) ?? screenForMouse()
+        else { return } // 화면 없음 — 클램프 대상이 없으니 그대로 둔다
         let bounds = screen.visibleFrame
 
         origin.x = min(max(origin.x, bounds.minX), bounds.maxX - size.width)

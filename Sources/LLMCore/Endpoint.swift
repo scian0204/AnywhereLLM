@@ -14,6 +14,9 @@ public func joinEndpoint(base: String, path: String) -> String {
 public func endpointOrigin(_ base: String) -> String? {
     guard let url = URL(string: base.trimmingCharacters(in: .whitespacesAndNewlines)),
           let scheme = url.scheme, let host = url.host else { return nil }
+    // url.host는 IPv6 리터럴의 대괄호를 벗겨 반환한다("::1") — 재부착하지 않으면
+    // "http://::1:11434"처럼 포트와 뒤엉킨 잘못된 origin이 나온다.
+    let bracketed = host.contains(":") ? "[\(host)]" : host
     let port = url.port.map { ":\($0)" } ?? ""
-    return "\(scheme)://\(host)\(port)"
+    return "\(scheme)://\(bracketed)\(port)"
 }

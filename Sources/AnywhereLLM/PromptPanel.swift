@@ -11,6 +11,9 @@ import SwiftUI
 @MainActor
 final class PromptPanel: NSPanel {
     private var controller: ConversationController?
+    /// 확정 삽입의 지연 쓰기 작업 — 새 세션이 열리거나 닫히면 취소해야 결과가
+    /// 엉뚱한(재오픈된) 패널·컨텍스트로 흘러가지 않는다.
+    private var pendingApply: DispatchWorkItem?
     /// 리사이즈 시 고정할 좌상단 점. NSWindow origin은 좌하단이라 콘텐츠가
     /// 커지면 위로 자라 결과가 화면 위로 밀려난다 — 상단을 고정해 아래로 자라게 한다.
     private var anchoredTopLeft: NSPoint?
@@ -77,6 +80,8 @@ final class PromptPanel: NSPanel {
     func present(context: TargetContext) {
         // 진행 중이던 삽입 스트리밍이 있으면 중단 — 핫키 재입력이 취소 수단.
         self.controller?.cancel()
+        // 직전 세션의 지연 삽입이 아직 큐에 있으면 취소 — 새 세션 위로 타이핑 방지.
+        pendingApply?.cancel()
 
         let controller = ConversationController(context: context)
         // 모든 콜백에 identity 가드 — 취소로 세션이 교체된 뒤 옛 컨트롤러가
@@ -95,6 +100,7 @@ final class PromptPanel: NSPanel {
             guard let self, self.controller === controller else { return }
             self.controller = nil
             self.orderOut(nil)
+            self.dropContentView() // 캡처한 선택/전체 텍스트를 메모리에 남기지 않는다
         }
         // 에러: 숨겨둔 패널을 다시 띄워 메시지를 보여준다.
         controller.onStreamingInsertError = { [weak self, weak controller] in
@@ -124,8 +130,14 @@ final class PromptPanel: NSPanel {
     private func apply(_ result: String, into context: TargetContext) {
         orderOut(nil)
         controller = nil
+        dropContentView()
+        pendingApply?.cancel()
         // Short delay so the target app is frontmost again before we synthesize keys / set AX.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        // 취소 가능한 작업으로 감싼다 — 이 사이 핫키 재입력으로 새 패널이 뜨면
+        // present()/dismiss()가 취소해 결과가 새 세션으로 새지 않는다.
+        let work = DispatchWorkItem { [weak self] in
+            // 방어선: 새 패널이 이미 보이면(=key 소유) 타이핑이 그리로 라우팅된다 — 중단.
+            guard let self, !self.isVisible else { return }
             if context.selectedText?.isEmpty == false {
                 // 교체: AX setSelectedText가 선택 영역을 정확히 대체 (⌘V 폴백 포함).
                 TextTargetService.insert(result, into: context)
@@ -133,9 +145,20 @@ final class PromptPanel: NSPanel {
                 // 삽입(무선택): 유니코드 타이핑 — AX setSelectedText가 조용히 무시되는
                 // 앱(웹뷰 등)과 ⌘V 폴백의 paste 타이밍 의존을 모두 피한다.
                 // 스트리밍 삽입과 같은 검증된 경로. 보안 필드 재확인은 typeText 내부.
-                TextTargetService.typeText(result)
+                // expectedBundleId: 비활성 패널 위에서 다른 앱을 클릭해 두고 apply하면
+                // 결과가 엉뚱한 앱에 타이핑되는 것을 막는다.
+                TextTargetService.typeText(result, expectedBundleId: context.bundleId)
             }
         }
+        pendingApply = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + TextTargetService.focusReturnDelay, execute: work)
+    }
+
+    /// contentView(NSHostingView)를 비워 죽은 세션의 controller·transcript·캡처
+    /// 텍스트(선택/전체 필드 내용)를 메모리에서 즉시 해제한다. present()가 매번
+    /// 새 NSHostingView를 설치하므로 다음 표시에 영향 없음.
+    private func dropContentView() {
+        contentView = NSView()
     }
 
     /// Close the panel, cancelling any in-flight stream and resetting the session.
@@ -143,7 +166,9 @@ final class PromptPanel: NSPanel {
     func dismiss() {
         controller?.cancel()
         controller = nil
+        pendingApply?.cancel()
         orderOut(nil)
+        dropContentView()
     }
 
     /// Esc closes the panel and resets the conversation.

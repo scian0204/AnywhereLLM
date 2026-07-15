@@ -26,6 +26,16 @@ import Testing
         #expect(OllamaChatParser.parse(line: "") == .ignore)
         #expect(OllamaChatParser.parse(line: "{not json") == .ignore)
     }
+
+    @Test func midStreamError() {
+        let line = #"{"error":"model runner has unexpectedly stopped"}"#
+        #expect(OllamaChatParser.parse(line: line) == .error("model runner has unexpectedly stopped"))
+    }
+
+    @Test func messagePresentButContentMissing() {
+        let line = #"{"message":{"role":"assistant"},"done":false}"#
+        #expect(OllamaChatParser.parse(line: line) == .ignore)
+    }
 }
 
 @Suite struct EndpointOriginTests {
@@ -43,5 +53,9 @@ import Testing
 
     @Test func invalidReturnsNil() {
         #expect(endpointOrigin("설정안함") == nil)
+    }
+
+    @Test func ipv6LiteralKeepsBrackets() {
+        #expect(endpointOrigin("http://[::1]:11434/v1") == "http://[::1]:11434")
     }
 }

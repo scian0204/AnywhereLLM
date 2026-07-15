@@ -26,4 +26,29 @@ import Testing
     @Test func malformedJSONIgnored() {
         #expect(SSEParser.parse(line: "data: {not json") == .ignore)
     }
+
+    @Test func doneSentinelNoSpace() {
+        #expect(SSEParser.parse(line: "data:[DONE]") == .done)
+    }
+
+    @Test func usageOnlyFinalChunkIgnored() {
+        // stream_options include_usage sends a trailing choices-less usage chunk.
+        let line = #"data: {"choices":[],"usage":{"total_tokens":42}}"#
+        #expect(SSEParser.parse(line: line) == .ignore)
+    }
+
+    @Test func nullContentIgnored() {
+        let line = #"data: {"choices":[{"delta":{"content":null}}]}"#
+        #expect(SSEParser.parse(line: line) == .ignore)
+    }
+
+    @Test func midStreamErrorObject() {
+        let line = #"data: {"error":{"message":"rate limited","type":"rate_limit"}}"#
+        #expect(SSEParser.parse(line: line) == .error("rate limited"))
+    }
+
+    @Test func midStreamErrorString() {
+        #expect(SSEParser.parse(line: #"data: {"error":"upstream failure"}"#)
+                == .error("upstream failure"))
+    }
 }

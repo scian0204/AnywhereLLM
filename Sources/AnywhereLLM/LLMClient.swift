@@ -35,12 +35,17 @@ final class LLMClient {
         self.session = session
     }
 
+    // 설정 필드를 지우면 @AppStorage가 nil이 아니라 ""를 저장한다 — ?? 기본값이
+    // 발동하지 않아 URL/모델이 빈 문자열로 나가 요청이 불투명한 오류로 실패한다.
+    // 공백만 남은 값도 미설정으로 간주해 기본값으로 되돌린다.
     var baseURL: String {
-        defaults.string(forKey: Self.baseURLKey) ?? "https://api.openai.com/v1"
+        let v = (defaults.string(forKey: Self.baseURLKey) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return v.isEmpty ? "https://api.openai.com/v1" : v
     }
 
     var model: String {
-        defaults.string(forKey: Self.modelKey) ?? "gpt-4o-mini"
+        let v = (defaults.string(forKey: Self.modelKey) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return v.isEmpty ? "gpt-4o-mini" : v
     }
 
     /// Streams assistant content deltas. Throws LLMError on non-200; propagates cancellation.
@@ -74,31 +79,71 @@ final class LLMClient {
                                             message: try await Self.errorMessage(from: bytes))
                     }
 
-                    if native {
-                        for try await line in bytes.lines {
-                            try Task.checkCancellation()
-                            switch OllamaChatParser.parse(line: line) {
-                            case .content(let chunk): continuation.yield(chunk)
-                            case .done: continuation.finish(); return
-                            case .ignore: continue
-                            }
-                        }
-                    } else {
-                        for try await line in bytes.lines {
-                            try Task.checkCancellation()
-                            switch SSEParser.parse(line: line) {
-                            case .content(let chunk): continuation.yield(chunk)
-                            case .done: continuation.finish(); return
-                            case .ignore: continue
-                            }
+                    // 프로토콜 프레이밍은 \n에만 의존한다. URLSession.AsyncBytes.lines는
+                    // U+2028/U+2029/U+0085도 줄바꿈으로 취급하는데, 이 문자들은 JSON 문자열
+                    // 안에 이스케이프 없이 올 수 있어(Python 계열 서버가 실제로 그렇게 보냄)
+                    // delta 한 줄이 둘로 쪼개져 통째로 유실된다 — 직접 \n 프레이밍으로 회피.
+                    let parse = Self.lineParser(native: native)
+                    var sawDone = false
+                    var buf = [UInt8]()
+
+                    func handle(_ bytesLine: [UInt8]) throws {
+                        var slice = bytesLine
+                        if slice.last == 0x0D { slice.removeLast() } // CRLF
+                        switch parse(String(decoding: slice, as: UTF8.self)) {
+                        case .content(let chunk): continuation.yield(chunk)
+                        case .done: sawDone = true
+                        case .error(let msg): throw LLMError.http(status: 200, message: msg)
+                        case .ignore: break
                         }
                     }
-                    continuation.finish()
+
+                    for try await byte in bytes {
+                        if byte != 0x0A { buf.append(byte); continue }
+                        try Task.checkCancellation()
+                        try handle(buf)
+                        buf.removeAll(keepingCapacity: true)
+                        if sawDone { continuation.finish(); return }
+                    }
+                    if !buf.isEmpty { try handle(buf) } // 마지막 줄에 \n이 없을 수 있음 (NDJSON)
+                    // [DONE]/done:true 없이 연결이 조용히 끊기면(프록시 idle 타임아웃 등)
+                    // 잘린 출력이다 — 성공으로 끝내면 immediate 모드가 잘린 텍스트를
+                    // 그대로 선택 영역에 덮어쓴다. 명시적 절단 오류로 승격.
+                    if sawDone {
+                        continuation.finish()
+                    } else {
+                        throw LLMError.http(status: -1, message: L("error.truncatedStream"))
+                    }
                 } catch {
                     continuation.finish(throwing: error)
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// 한 줄 파싱 결과 — SSE/Ollama 두 파서를 하나의 스트리밍 루프에서 소비하기 위한 공통 표현.
+    private enum LineResult { case content(String), done, error(String), ignore }
+
+    /// native 여부에 따라 알맞은 파서를 골라 공통 LineResult로 사상하는 클로저.
+    private static func lineParser(native: Bool) -> (String) -> LineResult {
+        if native {
+            return { line in
+                switch OllamaChatParser.parse(line: line) {
+                case .content(let c): return .content(c)
+                case .done: return .done
+                case .error(let m): return .error(m)
+                case .ignore: return .ignore
+                }
+            }
+        }
+        return { line in
+            switch SSEParser.parse(line: line) {
+            case .content(let c): return .content(c)
+            case .done: return .done
+            case .error(let m): return .error(m)
+            case .ignore: return .ignore
+            }
         }
     }
 
@@ -179,7 +224,12 @@ final class LLMClient {
     /// OpenAI 형태({"error":{"message":…}})와 Ollama 형태({"error":"…"}) 모두 지원.
     private static func errorMessage(from bytes: URLSession.AsyncBytes) async throws -> String {
         var data = Data()
-        for try await byte in bytes { data.append(byte) }
+        // 서버 응답은 신뢰할 수 없는 입력이다 — 손상/악성 엔드포인트가 끝없는 청크
+        // 에러 바디를 흘리면 무한 버퍼링으로 메모리가 고갈된다. 에러 메시지에 64KB면 충분.
+        for try await byte in bytes {
+            data.append(byte)
+            if data.count >= 64_000 { break }
+        }
         if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let error = obj["error"] as? [String: Any],
                let message = error["message"] as? String {

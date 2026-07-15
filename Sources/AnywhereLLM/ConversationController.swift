@@ -3,9 +3,8 @@ import LLMCore
 import SwiftUI
 
 /// One line in the on-screen transcript (select mode only).
-struct TranscriptEntry: Identifiable {
+struct TranscriptEntry {
     enum Role { case user, assistant }
-    let id = UUID()
     let role: Role
     var text: String
 }
@@ -85,15 +84,18 @@ final class ConversationController: ObservableObject {
     /// 편집 가능 + 선택 없음 + immediate만 실시간 타이핑(패널 숨김) 경로를 탄다.
     var showsTranscriptUI: Bool { isViewOnly || hasSelection || applyMode != "immediate" }
 
-    func send(_ input: String) {
+    /// 반환값 = 턴이 수락됐는지. false면 뷰가 입력을 지우지 않아야 한다(스트리밍 중
+    /// 또는 빈 요청 등으로 거부된 입력이 조용히 사라지는 데이터 유실 방지).
+    @discardableResult
+    func send(_ input: String) -> Bool {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !isStreaming else { return }
+        guard !isStreaming else { return false }
         // 선택이 있으면 첫 턴은 빈 입력 허용 — 프롬프트 프로필이 지시 역할.
         // 프로필까지 비어 있으면 지시가 전무한 요청(오입력 ⏎일 확률) — immediate 모드에선
         // 무지시 응답이 선택을 자동 교체해버리므로 막는다.
         let profile = (defaults.string(forKey: Self.systemPromptKey) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || (hasSelection && transcript.isEmpty && !profile.isEmpty) else { return }
+        guard !trimmed.isEmpty || (hasSelection && transcript.isEmpty && !profile.isEmpty) else { return false }
         errorMessage = nil
         pendingResult = nil
 
@@ -102,6 +104,7 @@ final class ConversationController: ObservableObject {
         } else {
             sendInsertTurn(trimmed)
         }
+        return true
     }
 
     // MARK: - Insert mode (live streaming into the target)
@@ -111,6 +114,9 @@ final class ConversationController: ObservableObject {
                         ChatMessage(role: "user", content: userContent(input, firstTurn: true))]
         isStreaming = true
 
+        // context는 MainActor 격리(AXUIElement 포함, non-Sendable) — Task 클로저에서
+        // 참조 불가하므로 Sendable한 bundleId만 미리 지역으로 뽑아 넘긴다.
+        let targetBundleId = context.bundleId
         streamTask = Task { [weak self] in
             guard let self else { return }
             var filter = ThinkTagFilter()
@@ -125,12 +131,14 @@ final class ConversationController: ObservableObject {
                 guard !typingStarted else { return }
                 typingStarted = true
                 onStreamingInsertStart?()
-                try await Task.sleep(for: .milliseconds(150))
+                try await Task.sleep(for: .seconds(TextTargetService.focusReturnDelay))
             }
 
             func flush() {
                 guard !buffer.isEmpty else { return }
-                TextTargetService.typeText(buffer)
+                // 캡처 시점 대상 앱이 여전히 frontmost일 때만 타이핑 — 사용자가 스트림
+                // 도중 다른 앱으로 전환하면 이후 flush는 아무 것도 하지 않는다.
+                TextTargetService.typeText(buffer, expectedBundleId: targetBundleId)
                 buffer = ""
             }
 

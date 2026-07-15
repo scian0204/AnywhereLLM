@@ -40,4 +40,14 @@ private func run(_ chunks: [String]) -> String {
     @Test func lessThanSignAlone() {
         #expect(run(["1 < 2 and ", "3 > 2"]) == "1 < 2 and 3 > 2")
     }
+
+    @Test func streamEndsOnHeldPartialTag() {
+        // Stream ends mid-possible-tag: flush() must release the held-back text.
+        #expect(run(["abc<thi"]) == "abc<thi")
+    }
+
+    @Test func strayCloseTagWithoutOpen() {
+        // A </think> with no preceding <think> is plain text, not a filter trigger.
+        #expect(run(["a</think>b"]) == "a</think>b")
+    }
 }

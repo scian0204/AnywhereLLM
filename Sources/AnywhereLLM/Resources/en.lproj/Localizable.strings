@@ -37,6 +37,7 @@
 "settings.includeAppName" = "Include target app name";
 "settings.includeFullText" = "Include full field content";
 "settings.fullTextWarning" = "The focused field's entire content is sent to the API.";
+"settings.cleartextKeyWarning" = "This endpoint uses plain HTTP — your API key is sent unencrypted and can be read by others on the network.";
 "settings.systemPrompt" = "System Prompt";
 "settings.profile" = "Profile";
 "settings.add" = "Add";
@@ -60,9 +61,12 @@
 "error.httpFailure" = "LLM request failed (HTTP %d): %@";
 "error.invalidResponse" = "Invalid response";
 "error.unknown" = "Unknown error";
+"error.truncatedStream" = "The response was cut off before completing.";
 
 /* Menu bar */
 "app.secureFieldBlocked" = "Secure field blocked";
+"hotkey.conflictTitle" = "Hotkey unavailable";
+"hotkey.conflictMessage" = "That key combination is already in use by another app. The previous hotkey has been kept. Pick a different combination in Settings.";
 "menu.edit" = "Edit";
 "menu.undo" = "Undo";
 "menu.redo" = "Redo";
