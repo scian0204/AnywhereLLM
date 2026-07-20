@@ -82,6 +82,9 @@ Swift/SPM 소스는 그대로 두어(coexist) 참조·회귀 대조가 가능하
   라이트/다크로 자동 재테마 + 손수 만든 패널 표면은 테마 브러시
   (`Brush.Surface`/`SurfaceAlt`/`Border`/`Text`) 스왑. OS 테마 전환 시
   `SystemEvents.UserPreferenceChanged`로 실시간 갱신 (`Services/ThemeManager.cs`).
+- **앱 아이콘**: `Resources/AppIcon.ico`(GDI+로 생성 — mac 아이콘 언어 계승: 인디고
+  `#5B5BD6` 라운드 사각형 + 흰 4점 스파클, 16~256 다중 크기). `ApplicationIcon`으로
+  exe/작업표시줄/Explorer, 트레이는 `ExtractAssociatedIcon`, 설정창은 `Window.Icon`.
 
 ## 빌드 / 실행
 

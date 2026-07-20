@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Width="460" Height="680" WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize" ShowInTaskbar="True"
+        Icon="Resources/AppIcon.ico"
         Background="{DynamicResource Brush.Surface}">
   <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16"
                 TextElement.Foreground="{DynamicResource Brush.Text}">

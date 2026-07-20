@@ -35,7 +35,7 @@ public partial class App : Application
 
         _tray = new Forms.NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = LoadAppIcon(),
             Visible = true,
             Text = "AnywhereLLM",
             ContextMenuStrip = menu,
@@ -72,6 +72,18 @@ public partial class App : Application
 
     private static string BuildVersion()
         => Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "?";
+
+    /// The app icon from the exe (multi-res, so the tray can pick the 16px frame).
+    private static System.Drawing.Icon LoadAppIcon()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (exe != null && System.Drawing.Icon.ExtractAssociatedIcon(exe) is { } ico) return ico;
+        }
+        catch { /* fall back below */ }
+        return System.Drawing.SystemIcons.Application;
+    }
 
     protected override void OnExit(ExitEventArgs e)
     {

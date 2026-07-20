@@ -10,6 +10,7 @@
     <AssemblyName>AnywhereLLM</AssemblyName>
     <RootNamespace>AnywhereLLM</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
     <!-- WFO0003: WinForms wants DPI via its own API, but this is a WPF app — DPI is
          set in the manifest (PerMonitorV2) as WPF expects. WinForms is referenced
          only for the tray NotifyIcon; its message loop never runs. -->
@@ -25,5 +26,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AnywhereLLM.Core\AnywhereLLM.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Icon as a WPF resource too (beyond ApplicationIcon), so Window.Icon can
+       reference it via a pack URI. -->
+  <ItemGroup>
+    <Resource Include="Resources\AppIcon.ico" />
   </ItemGroup>
 </Project>
