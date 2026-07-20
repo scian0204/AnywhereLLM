@@ -1,6 +1,11 @@
 .build/
 .swiftpm/
 build/
-*.app
 .DS_Store
 xcuserdata/
+
+# .NET / Windows port build artifacts
+windows/**/bin/
+windows/**/obj/
+windows/**/*.msi
+windows/**/*.wixpdb

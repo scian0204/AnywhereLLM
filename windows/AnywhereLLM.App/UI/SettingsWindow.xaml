@@ -1,0 +1,78 @@
+<Window x:Class="AnywhereLLM.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="460" Height="680" WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize" ShowInTaskbar="True"
+        Icon="/Resources/AppIcon.ico"
+        Background="{DynamicResource Brush.Surface}">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16"
+                TextElement.Foreground="{DynamicResource Brush.Text}">
+    <StackPanel>
+      <GroupBox x:Name="LlmGroup" Header="LLM" Padding="8" Margin="0,0,0,12">
+        <StackPanel>
+          <TextBlock Text="Base URL"/>
+          <TextBox x:Name="BaseUrlBox" Margin="0,2,0,8" TextChanged="BaseUrlBox_TextChanged"/>
+          <TextBlock x:Name="ApiKeyLabel"/>
+          <PasswordBox x:Name="ApiKeyBox" Margin="0,2,0,4" PasswordChanged="ApiKeyBox_PasswordChanged"/>
+          <TextBlock x:Name="CleartextWarn" Foreground="#E08A00" TextWrapping="Wrap"
+                     FontSize="11" Margin="0,0,0,8" Visibility="Collapsed"/>
+          <TextBlock x:Name="ModelLabel"/>
+          <DockPanel Margin="0,2,0,4">
+            <Button x:Name="FetchButton" DockPanel.Dock="Right" Margin="6,0,0,0"
+                    Padding="8,2" Click="FetchButton_Click"/>
+            <TextBox x:Name="ModelBox" TextChanged="ModelBox_TextChanged"/>
+          </DockPanel>
+          <ComboBox x:Name="FetchedModelsBox" Margin="0,0,0,4" Visibility="Collapsed"
+                    SelectionChanged="FetchedModelsBox_SelectionChanged"/>
+          <TextBlock x:Name="FetchError" Foreground="#D14343" FontSize="11"
+                     TextWrapping="Wrap" Visibility="Collapsed"/>
+          <CheckBox x:Name="DisableThinkBox" Margin="0,8,0,0" Click="DisableThinkBox_Click"/>
+          <TextBlock x:Name="DisableThinkHelp" Opacity="0.7" FontSize="11"
+                     TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"/>
+        </StackPanel>
+      </GroupBox>
+
+      <GroupBox x:Name="BehaviorGroup" Padding="8" Margin="0,0,0,12">
+        <StackPanel>
+          <TextBlock x:Name="ApplyModeLabel"/>
+          <ComboBox x:Name="ApplyModeBox" Margin="0,2,0,8" SelectionChanged="ApplyModeBox_SelectionChanged"/>
+          <TextBlock x:Name="PositionLabel"/>
+          <ComboBox x:Name="PositionBox" Margin="0,2,0,0" SelectionChanged="PositionBox_SelectionChanged"/>
+        </StackPanel>
+      </GroupBox>
+
+      <GroupBox x:Name="ContextGroup" Padding="8" Margin="0,0,0,12">
+        <StackPanel>
+          <CheckBox x:Name="IncludeAppNameBox" Click="IncludeAppNameBox_Click"/>
+          <CheckBox x:Name="IncludeFullTextBox" Margin="0,6,0,0" Click="IncludeFullTextBox_Click"/>
+          <TextBlock x:Name="FullTextWarn" Foreground="#E08A00" FontSize="11"
+                     TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"/>
+        </StackPanel>
+      </GroupBox>
+
+      <GroupBox x:Name="PromptGroup" Padding="8" Margin="0,0,0,12">
+        <StackPanel>
+          <DockPanel Margin="0,0,0,6">
+            <Button x:Name="AddProfileButton" DockPanel.Dock="Right" Padding="6,2" Margin="4,0,0,0" Click="AddProfile_Click"/>
+            <Button x:Name="RenameProfileButton" DockPanel.Dock="Right" Padding="6,2" Margin="4,0,0,0" Click="RenameProfile_Click"/>
+            <Button x:Name="DeleteProfileButton" DockPanel.Dock="Right" Padding="6,2" Margin="4,0,0,0" Click="DeleteProfile_Click"/>
+            <ComboBox x:Name="ProfileBox" SelectionChanged="ProfileBox_SelectionChanged"/>
+          </DockPanel>
+          <TextBox x:Name="PromptBox" MinHeight="90" AcceptsReturn="True" TextWrapping="Wrap"
+                   VerticalScrollBarVisibility="Auto" TextChanged="PromptBox_TextChanged"/>
+        </StackPanel>
+      </GroupBox>
+
+      <GroupBox x:Name="HotkeyGroup" Padding="8" Margin="0,0,0,12">
+        <DockPanel>
+          <Button x:Name="RecordButton" DockPanel.Dock="Right" Padding="8,2" Click="RecordButton_Click"/>
+          <TextBlock x:Name="HotkeyDisplay" VerticalAlignment="Center" FontFamily="Consolas"/>
+        </DockPanel>
+      </GroupBox>
+
+      <GroupBox x:Name="SystemGroup" Padding="8">
+        <CheckBox x:Name="LaunchAtLoginBox" Click="LaunchAtLoginBox_Click"/>
+      </GroupBox>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

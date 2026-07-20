@@ -96,11 +96,24 @@ make run        # build, then run
 > ```
 > If the permission gets into a bad state: `tccutil reset Accessibility kr.scian0204.AnywhereLLM`
 
+### Windows
+
+Download `AnywhereLLM-<version>-x64.msi` from the [Releases](https://github.com/scian0204/AnywhereLLM/releases)
+page and double-click — it installs per-user (no admin), with a Start-Menu shortcut and an uninstall entry. Or build it:
+
+```powershell
+cd windows
+.\packaging\installer\build-installer.ps1   # → packaging/installer/AnywhereLLM-<version>-x64.msi
+```
+
+The Windows build is a .NET 10 / WPF tray app (default hotkey **Ctrl+Shift+Space**);
+no accessibility permission is needed, unlike macOS. Details: [windows/README.md](windows/README.md).
+
 ### Requirements
 
 | | |
 |---|---|
-| OS | macOS 14 (Sonoma) or later |
+| OS | macOS 14 (Sonoma) or later — or Windows 10/11 |
 | Build | Swift 6.0 toolchain (Xcode Command Line Tools) |
 | Permission | Accessibility — guided on first launch |
 | LLM | An OpenAI-compatible chat completions endpoint (local or remote) |

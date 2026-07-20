@@ -1,5 +1,6 @@
 APP_NAME    = AnywhereLLM
-VERSION     = 0.2.3
+# 버전은 저장소 루트 VERSION 파일 하나로 통일 — Windows 빌드(windows/Directory.Build.props)와 공유.
+VERSION    := $(shell head -n1 VERSION | tr -d '[:space:]')
 BUNDLE_ID   = kr.scian0204.AnywhereLLM
 BUILD_DIR   = build
 APP_BUNDLE  = $(BUILD_DIR)/$(APP_NAME).app

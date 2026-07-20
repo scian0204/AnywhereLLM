@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Per-user MSI for AnywhereLLM. Installs the self-contained single-file exe under
+  %LOCALAPPDATA%\Programs\AnywhereLLM, adds a Start-Menu shortcut and an
+  Add/Remove-Programs entry. Per-user scope ⇒ no admin elevation.
+  Build via packaging/installer/build-installer.ps1 (passes ExePath/IconPath/Version).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="AnywhereLLM" Manufacturer="scian0204"
+           Version="$(var.Version)" UpgradeCode="8F2B6A14-9C3D-4E7A-B1F5-2D6C8A0E3B47"
+           Scope="perUser" Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of AnywhereLLM is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon.ico" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/scian0204/AnywhereLLM" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="AnywhereLLM" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuDir" Name="AnywhereLLM" />
+    </StandardDirectory>
+
+    <Component Id="MainExe" Directory="INSTALLFOLDER" Guid="B7D14E90-3A62-4C8F-9B21-5E0A7C6D2F13">
+      <File Id="AnywhereLLMExe" Source="$(var.ExePath)" Name="AnywhereLLM.exe" KeyPath="yes" />
+    </Component>
+
+    <Component Id="StartMenuShortcut" Directory="AppMenuDir" Guid="A3C9E721-4B8D-42F1-9E6A-7C1D5F0B2A88">
+      <Shortcut Id="AppShortcut" Name="AnywhereLLM" Target="[#AnywhereLLMExe]"
+                WorkingDirectory="INSTALLFOLDER" Icon="AppIcon.ico" />
+      <RemoveFolder Id="RemoveAppMenuDir" Directory="AppMenuDir" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\scian0204\AnywhereLLM"
+                     Name="installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Feature Id="Main" Title="AnywhereLLM" Level="1">
+      <ComponentRef Id="MainExe" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>
