@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>AnywhereLLM</AssemblyName>
+    <RootNamespace>AnywhereLLM</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WFO0003: WinForms wants DPI via its own API, but this is a WPF app — DPI is
+         set in the manifest (PerMonitorV2) as WPF expects. WinForms is referenced
+         only for the tray NotifyIcon; its message loop never runs. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <!-- WinForms (used only for the tray NotifyIcon + Screen) is accessed via the
+       `Forms` alias; drop its implicit using so it can't shadow WPF's Application,
+       KeyEventArgs, ComboBox, etc. -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AnywhereLLM.Core\AnywhereLLM.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="AnywhereLLM.App/AnywhereLLM.App.csproj" />
+  <Project Path="AnywhereLLM.Core.Tests/AnywhereLLM.Core.Tests.csproj" />
+  <Project Path="AnywhereLLM.Core/AnywhereLLM.Core.csproj" />
+</Solution>

@@ -1,0 +1,124 @@
+using AnywhereLLM.Core;
+
+// Dependency-free test runner (no NuGet, offline-safe) porting the four Swift
+// LLMCore test suites: SSEParser, ThinkTagFilter, Endpoint, OllamaChatParser.
+// Exit code 0 = all pass, 1 = any failure — the CI/`make test` signal.
+
+var t = new Runner();
+
+// ---- SseParser ---------------------------------------------------------------
+t.Eq("SSE.extractsContentDelta",
+    SseParser.Parse("""data: {"choices":[{"delta":{"content":"Hello"}}]}"""),
+    LineResult.Content("Hello"));
+t.Eq("SSE.doneSentinel", SseParser.Parse("data: [DONE]"), LineResult.Done);
+t.Eq("SSE.blank", SseParser.Parse(""), LineResult.Ignore);
+t.Eq("SSE.comment", SseParser.Parse(": keep-alive comment"), LineResult.Ignore);
+t.Eq("SSE.eventLine", SseParser.Parse("event: message"), LineResult.Ignore);
+t.Eq("SSE.roleOnlyDelta",
+    SseParser.Parse("""data: {"choices":[{"delta":{"role":"assistant"}}]}"""),
+    LineResult.Ignore);
+t.Eq("SSE.malformedJSON", SseParser.Parse("data: {not json"), LineResult.Ignore);
+t.Eq("SSE.doneNoSpace", SseParser.Parse("data:[DONE]"), LineResult.Done);
+t.Eq("SSE.usageOnlyChunk",
+    SseParser.Parse("""data: {"choices":[],"usage":{"total_tokens":42}}"""),
+    LineResult.Ignore);
+t.Eq("SSE.nullContent",
+    SseParser.Parse("""data: {"choices":[{"delta":{"content":null}}]}"""),
+    LineResult.Ignore);
+t.Eq("SSE.midStreamErrorObject",
+    SseParser.Parse("""data: {"error":{"message":"rate limited","type":"rate_limit"}}"""),
+    LineResult.Error("rate limited"));
+t.Eq("SSE.midStreamErrorString",
+    SseParser.Parse("""data: {"error":"upstream failure"}"""),
+    LineResult.Error("upstream failure"));
+
+// ---- ThinkTagFilter ----------------------------------------------------------
+static string Run(params string[] chunks)
+{
+    var f = new ThinkTagFilter();
+    var sb = new System.Text.StringBuilder();
+    foreach (var c in chunks) sb.Append(f.Feed(c));
+    sb.Append(f.Flush());
+    return sb.ToString();
+}
+t.Eq("Think.noThink", Run("Hello, ", "world!"), "Hello, world!");
+t.Eq("Think.completeBlock", Run("<think>reasoning here</think>answer"), "answer");
+t.Eq("Think.splitAcrossChunks",
+    Run("before <th", "ink>hidden", " stuff</thi", "nk>after"), "before after");
+t.Eq("Think.openNeverClosed", Run("visible <think>never closed reasoning"), "visible ");
+t.Eq("Think.partialNotATag", Run("a<th", "en b"), "a<then b");
+t.Eq("Think.multipleBlocks", Run("<think>x</think>A<think>y</think>B"), "AB");
+t.Eq("Think.lessThanAlone", Run("1 < 2 and ", "3 > 2"), "1 < 2 and 3 > 2");
+t.Eq("Think.endsOnHeldPartial", Run("abc<thi"), "abc<thi");
+t.Eq("Think.strayCloseTag", Run("a</think>b"), "a</think>b");
+
+// ---- Endpoint.Join -----------------------------------------------------------
+t.Eq("Join.plain", Endpoint.Join("https://api.openai.com/v1", "/models"),
+    "https://api.openai.com/v1/models");
+t.Eq("Join.trailingSlash", Endpoint.Join("http://localhost:11434/v1/", "/models"),
+    "http://localhost:11434/v1/models");
+t.Eq("Join.multiSlashAndWhitespace",
+    Endpoint.Join("  http://localhost:1234/v1// ", "chat/completions"),
+    "http://localhost:1234/v1/chat/completions");
+t.Eq("Join.noLeadingSlash", Endpoint.Join("https://api.openai.com/v1", "models"),
+    "https://api.openai.com/v1/models");
+
+// ---- Endpoint.Origin ---------------------------------------------------------
+t.Eq("Origin.stripsPathKeepsPort", Endpoint.Origin("http://192.168.5.182:11434/v1"),
+    "http://192.168.5.182:11434");
+t.Eq("Origin.noPortNoPath", Endpoint.Origin("https://api.openai.com/v1"),
+    "https://api.openai.com");
+t.Eq("Origin.trailingSlashWhitespace", Endpoint.Origin("  http://localhost:11434/v1/ "),
+    "http://localhost:11434");
+t.Eq("Origin.invalidReturnsNull", Endpoint.Origin("설정안함"), null);
+t.Eq("Origin.ipv6KeepsBrackets", Endpoint.Origin("http://[::1]:11434/v1"),
+    "http://[::1]:11434");
+
+// ---- OllamaChatParser --------------------------------------------------------
+t.Eq("Ollama.contentChunk",
+    OllamaChatParser.Parse("""{"message":{"role":"assistant","content":"안녕"},"done":false}"""),
+    LineResult.Content("안녕"));
+t.Eq("Ollama.thinkingOnlyIgnored",
+    OllamaChatParser.Parse("""{"message":{"role":"assistant","content":"","thinking":"음..."},"done":false}"""),
+    LineResult.Ignore);
+t.Eq("Ollama.doneLine",
+    OllamaChatParser.Parse("""{"message":{"role":"assistant","content":""},"done":true,"total_duration":123}"""),
+    LineResult.Done);
+t.Eq("Ollama.contentOnFinalLine",
+    OllamaChatParser.Parse("""{"message":{"role":"assistant","content":"끝"},"done":true}"""),
+    LineResult.Content("끝"));
+t.Eq("Ollama.empty", OllamaChatParser.Parse(""), LineResult.Ignore);
+t.Eq("Ollama.malformed", OllamaChatParser.Parse("{not json"), LineResult.Ignore);
+t.Eq("Ollama.midStreamError",
+    OllamaChatParser.Parse("""{"error":"model runner has unexpectedly stopped"}"""),
+    LineResult.Error("model runner has unexpectedly stopped"));
+t.Eq("Ollama.messageNoContent",
+    OllamaChatParser.Parse("""{"message":{"role":"assistant"},"done":false}"""),
+    LineResult.Ignore);
+
+return t.Report();
+
+sealed class Runner
+{
+    private int _pass, _fail;
+
+    public void Eq<T>(string name, T actual, T expected)
+    {
+        if (Equals(actual, expected)) { _pass++; return; }
+        _fail++;
+        Console.WriteLine($"FAIL {name}\n  expected: {Fmt(expected)}\n  actual:   {Fmt(actual)}");
+    }
+
+    private static string Fmt(object? o) => o switch
+    {
+        null => "null",
+        string s => $"\"{s}\"",
+        _ => o.ToString() ?? "null",
+    };
+
+    public int Report()
+    {
+        Console.WriteLine($"\n{_pass} passed, {_fail} failed");
+        return _fail == 0 ? 0 : 1;
+    }
+}
