@@ -1,0 +1,8 @@
+<Project>
+  <!-- Single source of truth for the version, shared with the macOS build.
+       The repo-root VERSION file is read by both the Makefile (mac) and here
+       (all windows/ projects), so the two platforms never drift. -->
+  <PropertyGroup>
+    <Version>$([System.Text.RegularExpressions.Regex]::Replace($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\VERSION')), '\s', ''))</Version>
+  </PropertyGroup>
+</Project>

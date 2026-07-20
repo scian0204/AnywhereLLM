@@ -96,11 +96,25 @@ make run        # 빌드 후 실행
 > ```
 > 권한이 꼬였다면: `tccutil reset Accessibility kr.scian0204.AnywhereLLM`
 
+### Windows
+
+[Releases](https://github.com/scian0204/AnywhereLLM/releases)에서 `AnywhereLLM-<버전>-x64.msi`를
+받아 더블클릭하면 됩니다 — 관리자 권한 없이 사용자 단위로 설치되고, 시작 메뉴 바로가기와
+제거 항목이 추가됩니다. 직접 빌드하려면:
+
+```powershell
+cd windows
+.\packaging\installer\build-installer.ps1   # → packaging/installer/AnywhereLLM-<버전>-x64.msi
+```
+
+Windows 빌드는 .NET 10 / WPF 트레이 앱입니다(기본 핫키 **Ctrl+Shift+Space**).
+macOS와 달리 접근성 권한이 필요 없습니다. 상세: [windows/README.md](windows/README.md).
+
 ### 요구 사항
 
 | | |
 |---|---|
-| OS | macOS 14 (Sonoma) 이상 |
+| OS | macOS 14 (Sonoma) 이상 — 또는 Windows 10/11 |
 | 빌드 | Swift 6.0 툴체인 (Xcode Command Line Tools) |
 | 권한 | 손쉬운 사용(Accessibility) — 첫 실행 시 안내 |
 | LLM | OpenAI 호환 chat completions 엔드포인트 (로컬/원격) |

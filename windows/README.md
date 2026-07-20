@@ -7,7 +7,18 @@ whatever app you were in.
 
 Design rationale and the full macOS→Windows mapping: [`../docs/progress/31-windows-port.md`](../docs/progress/31-windows-port.md).
 
-## Requirements
+## Install
+
+Download `AnywhereLLM-<version>-x64.msi` from
+[Releases](https://github.com/scian0204/AnywhereLLM/releases) and double-click —
+per-user (no admin), Start-Menu shortcut + uninstall entry. Or build the MSI:
+
+```powershell
+cd windows
+.\packaging\installer\build-installer.ps1
+```
+
+## Requirements (build from source)
 
 - Windows 10/11
 - .NET SDK 10 (`dotnet --version` ≥ 10)

@@ -8,6 +8,15 @@ macOS 메뉴바 상주 앱. 어떤 앱에서든 글로벌 핫키(기본 ⌘⇧Sp
 패널을 띄워 LLM 결과를 포커스된 텍스트박스에 삽입하거나 선택 텍스트를 교체한다.
 확정 설계 결정과 그 근거는 `docs/PLAN.md`, 단계별 구현 기록은 `docs/progress/NN-*.md`.
 
+## 이중 플랫폼 (중요)
+
+이 저장소는 macOS(Swift, 루트 `Sources/`)와 Windows(.NET/WPF, `windows/`) 두 구현을
+함께 유지한다. **새 기능·버그 수정은 두 플랫폼에 함께 반영하는 것을 기본으로 한다** —
+한쪽만 고치면 회귀. 소스 매핑·규칙·빌드 명령은 `docs/DUAL-PLATFORM.md`, mac↔win 상세
+대응은 `docs/progress/31-windows-port.md`. 순수 로직은 `Sources/LLMCore` ↔
+`windows/AnywhereLLM.Core`에 동일 동작 + 동일 테스트로 둔다. 버전은 루트 `VERSION` 파일
+하나(mac `Makefile`·win `windows/Directory.Build.props`가 공유).
+
 ## 명령
 
 ```bash
