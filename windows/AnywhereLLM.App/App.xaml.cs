@@ -18,6 +18,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        ThemeManager.Initialize(); // light/dark following the OS, before any window shows
         SetupTray();
 
         _hotkey = new HotkeyManager(() => Dispatcher.Invoke(TogglePanel));

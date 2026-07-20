@@ -76,6 +76,12 @@ Swift/SPM 소스는 그대로 두어(coexist) 참조·회귀 대조가 가능하
 - **설정 저장**: `%APPDATA%\AnywhereLLM\settings.json` (문자열 키 dict — UserDefaults
   의미 유지). 프롬프트 프로필 미러링(활성 프로필 → `systemPrompt` 키) 그대로.
 - **로그인 시 시작**: `HKCU\...\Run` 레지스트리 값(SMAppService 대응).
+- **테마(라이트/다크)**: macOS는 시스템 외관 자동 추종 → Windows도 OS 앱 테마
+  (레지스트리 `AppsUseLightTheme`) 추종. WPF Fluent `Application.ThemeMode`로 표준
+  컨트롤(TextBox/ComboBox/Button/GroupBox/PasswordBox/스크롤바)·설정창 크롬을
+  라이트/다크로 자동 재테마 + 손수 만든 패널 표면은 테마 브러시
+  (`Brush.Surface`/`SurfaceAlt`/`Border`/`Text`) 스왑. OS 테마 전환 시
+  `SystemEvents.UserPreferenceChanged`로 실시간 갱신 (`Services/ThemeManager.cs`).
 
 ## 빌드 / 실행
 

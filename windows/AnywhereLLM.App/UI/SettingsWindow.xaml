@@ -2,8 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Width="460" Height="680" WindowStartupLocation="CenterScreen"
-        ResizeMode="CanResize" ShowInTaskbar="True">
-  <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
+        ResizeMode="CanResize" ShowInTaskbar="True"
+        Background="{DynamicResource Brush.Surface}">
+  <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16"
+                TextElement.Foreground="{DynamicResource Brush.Text}">
     <StackPanel>
       <GroupBox x:Name="LlmGroup" Header="LLM" Padding="8" Margin="0,0,0,12">
         <StackPanel>

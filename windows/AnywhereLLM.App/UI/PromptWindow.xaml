@@ -6,8 +6,9 @@
         SizeToContent="WidthAndHeight" ShowActivated="True"
         WindowStartupLocation="Manual" PreviewKeyDown="Window_PreviewKeyDown">
   <Border CornerRadius="10" Width="460" BorderThickness="1"
-          Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
-          BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}">
+          Background="{DynamicResource Brush.Surface}"
+          BorderBrush="{DynamicResource Brush.Border}"
+          TextElement.Foreground="{DynamicResource Brush.Text}">
     <Border.Effect>
       <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.35"/>
     </Border.Effect>
@@ -23,10 +24,10 @@
                  Opacity="0.7" TextTrimming="CharacterEllipsis" Visibility="Collapsed"/>
 
       <Border x:Name="ResultBox" CornerRadius="6" Padding="8" Margin="0,0,0,8" Visibility="Collapsed"
-              Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+              Background="{DynamicResource Brush.SurfaceAlt}">
         <ScrollViewer x:Name="ResultScroll" MaxHeight="280" VerticalScrollBarVisibility="Auto">
           <TextBox x:Name="ResultText" IsReadOnly="True" BorderThickness="0"
-                   Background="Transparent" TextWrapping="Wrap"/>
+                   Background="Transparent" Foreground="{DynamicResource Brush.Text}" TextWrapping="Wrap"/>
         </ScrollViewer>
       </Border>
 
