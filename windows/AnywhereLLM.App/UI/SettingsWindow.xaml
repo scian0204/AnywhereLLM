@@ -14,6 +14,8 @@
           <TextBox x:Name="BaseUrlBox" Margin="0,2,0,8" TextChanged="BaseUrlBox_TextChanged"/>
           <TextBlock x:Name="ApiKeyLabel"/>
           <PasswordBox x:Name="ApiKeyBox" Margin="0,2,0,4" PasswordChanged="ApiKeyBox_PasswordChanged"/>
+          <TextBlock x:Name="ApiKeyHint" Foreground="#888888" TextWrapping="Wrap"
+                     FontSize="11" Margin="0,0,0,8"/>
           <TextBlock x:Name="CleartextWarn" Foreground="#E08A00" TextWrapping="Wrap"
                      FontSize="11" Margin="0,0,0,8" Visibility="Collapsed"/>
           <TextBlock x:Name="ModelLabel"/>

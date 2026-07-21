@@ -96,6 +96,42 @@ t.Eq("Ollama.messageNoContent",
     OllamaChatParser.Parse("""{"message":{"role":"assistant"},"done":false}"""),
     LineResult.Ignore);
 
+// ---- AnthropicParser ---------------------------------------------------------
+t.Eq("Anthropic.textDelta",
+    AnthropicParser.Parse("""data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}"""),
+    LineResult.Content("Hello"));
+t.Eq("Anthropic.messageStopDone",
+    AnthropicParser.Parse("""data: {"type":"message_stop"}"""), LineResult.Done);
+t.Eq("Anthropic.eventLineIgnored", AnthropicParser.Parse("event: content_block_delta"), LineResult.Ignore);
+t.Eq("Anthropic.blank", AnthropicParser.Parse(""), LineResult.Ignore);
+t.Eq("Anthropic.messageStartIgnored",
+    AnthropicParser.Parse("""data: {"type":"message_start","message":{"id":"x"}}"""), LineResult.Ignore);
+t.Eq("Anthropic.pingIgnored", AnthropicParser.Parse("""data: {"type":"ping"}"""), LineResult.Ignore);
+t.Eq("Anthropic.thinkingDeltaIgnored",
+    AnthropicParser.Parse("""data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}"""),
+    LineResult.Ignore);
+t.Eq("Anthropic.emptyTextDeltaIgnored",
+    AnthropicParser.Parse("""data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":""}}"""),
+    LineResult.Ignore);
+t.Eq("Anthropic.midStreamError",
+    AnthropicParser.Parse("""data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"""),
+    LineResult.Error("Overloaded"));
+t.Eq("Anthropic.malformedJSON", AnthropicParser.Parse("data: {not json"), LineResult.Ignore);
+t.Eq("Anthropic.noType", AnthropicParser.Parse("""data: {"no":"type"}"""), LineResult.Ignore);
+
+// ---- AnthropicOAuth ----------------------------------------------------------
+t.Eq("OAuth.detectsSetupToken", AnthropicOAuth.IsSetupToken("sk-ant-oat01-abc123"), true);
+t.Eq("OAuth.rejectsApiKey", AnthropicOAuth.IsSetupToken("sk-ant-api01-abc123"), false);
+t.Eq("OAuth.rejectsNull", AnthropicOAuth.IsSetupToken(null), false);
+t.Eq("OAuth.detectsWrappedWhitespace", AnthropicOAuth.IsSetupToken("sk-ant-oat01-aaa\nbbb ccc"), true);
+t.Eq("OAuth.sanitizeStripsWhitespace",
+    AnthropicOAuth.Sanitize("sk-ant-oat01-aaa\n bbb\tccc"), "sk-ant-oat01-aaabbbccc");
+t.Eq("OAuth.sanitizeLeavesNormalKey", AnthropicOAuth.Sanitize("with spaces"), "with spaces");
+t.Eq("OAuth.resolveKeepsClaude", AnthropicOAuth.ResolveModel("claude-opus-4-1"), "claude-opus-4-1");
+t.Eq("OAuth.resolveReplacesNonClaude", AnthropicOAuth.ResolveModel("gpt-4o-mini"), AnthropicOAuth.DefaultModel);
+t.Eq("OAuth.systemPrefixExact",
+    AnthropicOAuth.SystemPrefix, "You are Claude Code, Anthropic's official CLI for Claude.");
+
 return t.Report();
 
 sealed class Runner

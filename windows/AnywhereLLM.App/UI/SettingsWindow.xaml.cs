@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
+using AnywhereLLM.Core;
 using AnywhereLLM.Interop;
 using AnywhereLLM.Services;
 
@@ -69,6 +70,7 @@ public partial class SettingsWindow : Window
         BaseUrlBox.Text = AppSettings.GetString("llm.baseURL", "https://api.openai.com/v1");
         ModelBox.Text = AppSettings.GetString("llm.model", "gpt-4o-mini");
         ApiKeyBox.Password = CredentialStore.Get() ?? "";
+        UpdateApiKeyHint();
         DisableThinkBox.IsChecked = AppSettings.GetBool("llm.disableThink", false);
         DisableThinkHelp.Visibility = DisableThinkBox.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
 
@@ -106,8 +108,20 @@ public partial class SettingsWindow : Window
     private void ApiKeyBox_PasswordChanged(object s, RoutedEventArgs e)
     {
         if (_loading) return;
-        CredentialStore.Set(ApiKeyBox.Password);
+        // 셋업 토큰이면 내부 공백까지 제거해 저장(터미널 붙여넣기가 줄바꿈을 섞음). 일반 키는 무변경.
+        CredentialStore.Set(AnthropicOAuth.Sanitize(ApiKeyBox.Password));
+        UpdateApiKeyHint();
         UpdateCleartextWarning();
+    }
+
+    /// 셋업 토큰이 감지되면 구독 라우팅 안내(초록), 아니면 키 종류 힌트(회색).
+    private void UpdateApiKeyHint()
+    {
+        bool token = AnthropicOAuth.IsSetupToken(ApiKeyBox.Password);
+        ApiKeyHint.Text = Loc.L(token ? "settings.setupTokenActive" : "settings.apiKeyHint");
+        ApiKeyHint.Foreground = token
+            ? System.Windows.Media.Brushes.SeaGreen
+            : System.Windows.Media.Brushes.Gray;
     }
 
     private void DisableThinkBox_Click(object s, RoutedEventArgs e)

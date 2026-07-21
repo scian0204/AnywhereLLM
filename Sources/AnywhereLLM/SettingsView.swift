@@ -1,6 +1,7 @@
 import SwiftUI
 import ServiceManagement
 import Carbon.HIToolbox
+import LLMCore
 
 /// Settings form. All UserDefaults-backed keys use @AppStorage (auto-persist + auto-refresh).
 /// The API key lives in the Keychain, not UserDefaults, so it's loaded on appear and written
@@ -41,8 +42,18 @@ struct SettingsView: View {
             Section("LLM") {
                 TextField("Base URL", text: $baseURL)
                 SecureField(L("settings.apiKey"), text: $apiKey)
-                    .onSubmit { KeychainStore.set(apiKey) }
-                    .onChange(of: apiKey) { _, new in KeychainStore.set(new) }
+                    .onSubmit { KeychainStore.set(AnthropicOAuth.sanitize(apiKey)) }
+                    .onChange(of: apiKey) { _, new in KeychainStore.set(AnthropicOAuth.sanitize(new)) }
+                if AnthropicOAuth.isSetupToken(apiKey) {
+                    // 셋업 토큰 인식됨 — Anthropic 구독으로 라우팅. Base URL/모델 필드는 무시된다.
+                    Text(L("settings.setupTokenActive"))
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                } else {
+                    Text(L("settings.apiKeyHint"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if showCleartextKeyWarning {
                     Text(L("settings.cleartextKeyWarning"))
                         .font(.caption)

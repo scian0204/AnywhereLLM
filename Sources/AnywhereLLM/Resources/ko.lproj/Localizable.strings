@@ -18,6 +18,8 @@
 /* 설정 */
 "settings.windowTitle" = "AnywhereLLM 설정";
 "settings.apiKey" = "API 키";
+"settings.apiKeyHint" = "OpenAI 호환 API 키, 또는 `claude setup-token`이 발급한 Claude Pro/Max 셋업 토큰(sk-ant-oat01-…).";
+"settings.setupTokenActive" = "Claude 구독 셋업 토큰 인식됨 — 요청이 Claude Pro/Max 구독으로 처리됩니다 (Base URL·공급자 필드는 무시).";
 "settings.model" = "모델";
 "settings.fetching" = "가져오는 중…";
 "settings.fetchModels" = "모델 가져오기";

@@ -53,16 +53,21 @@ public sealed class LlmClient
         var disableThink = AppSettings.GetBool(DisableThinkKey, false);
         var baseUrl = BaseUrl;
         var model = Model;
-        var apiKey = CredentialStore.Get();
+        var apiKey = CredentialStore.Get() is { } k ? AnthropicOAuth.Sanitize(k) : null;
+        // A setup token (sk-ant-oat01-) routes to the Anthropic Messages API — ignore
+        // the configured Base URL and the Ollama probe.
+        bool oauth = AnthropicOAuth.IsSetupToken(apiKey);
 
         bool native = false;
-        if (disableThink)
+        if (!oauth && disableThink)
         {
             var origin = Endpoint.Origin(baseUrl);
             if (origin != null) native = await IsOllamaAsync(origin, ct).ConfigureAwait(false);
         }
 
-        using var request = BuildChatRequest(baseUrl, model, apiKey, messages, disableThink, native);
+        using var request = oauth
+            ? BuildAnthropicRequest(model, apiKey, messages)
+            : BuildChatRequest(baseUrl, model, apiKey, messages, disableThink, native);
         using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
             .ConfigureAwait(false);
 
@@ -89,25 +94,27 @@ public sealed class LlmClient
             {
                 byte b = readBuf[i];
                 if (b != 0x0A) { lineBuf.Add(b); continue; }
-                foreach (var chunk in HandleLine(lineBuf, native, ref sawDone)) yield return chunk;
+                foreach (var chunk in HandleLine(lineBuf, oauth, native, ref sawDone)) yield return chunk;
                 lineBuf.Clear();
                 if (sawDone) yield break;
             }
         }
         if (lineBuf.Count > 0)
-            foreach (var chunk in HandleLine(lineBuf, native, ref sawDone)) yield return chunk;
+            foreach (var chunk in HandleLine(lineBuf, oauth, native, ref sawDone)) yield return chunk;
 
         // A stream that ends without [DONE]/done:true was cut off (proxy idle
         // timeout etc.) — finishing "successfully" would insert truncated text.
         if (!sawDone) throw new LlmException(Loc.L("error.truncatedStream"));
     }
 
-    private static IEnumerable<string> HandleLine(List<byte> raw, bool native, ref bool sawDone)
+    private static IEnumerable<string> HandleLine(List<byte> raw, bool oauth, bool native, ref bool sawDone)
     {
         int len = raw.Count;
         if (len > 0 && raw[len - 1] == 0x0D) len--; // CRLF
         var line = Encoding.UTF8.GetString(raw.ToArray(), 0, len);
-        var result = native ? OllamaChatParser.Parse(line) : SseParser.Parse(line);
+        var result = oauth ? AnthropicParser.Parse(line)
+                   : native ? OllamaChatParser.Parse(line)
+                   : SseParser.Parse(line);
         switch (result.Kind)
         {
             case LineKind.Content: return new[] { result.Text };
@@ -120,8 +127,13 @@ public sealed class LlmClient
     /// GET {baseURL}/models → sorted model ids (for the settings "fetch models" button).
     public async Task<IReadOnlyList<string>> FetchModelsAsync(CancellationToken ct = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, Endpoint.Join(BaseUrl, "/models"));
-        AddAuth(request, CredentialStore.Get());
+        var token = CredentialStore.Get() is { } k ? AnthropicOAuth.Sanitize(k) : null;
+        bool oauth = AnthropicOAuth.IsSetupToken(token);
+        // Setup-token path lists Anthropic /v1/models — same {"data":[{"id":…}]} shape.
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            oauth ? AnthropicOAuth.ModelsUrl : Endpoint.Join(BaseUrl, "/models"));
+        if (oauth) ApplyOAuthHeaders(request, token);
+        else AddAuth(request, token);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(30));
         using var response = await Http.SendAsync(request, cts.Token).ConfigureAwait(false);
@@ -183,6 +195,53 @@ public sealed class LlmClient
         };
         AddAuth(request, apiKey);
         return request;
+    }
+
+    /// Anthropic Messages API request (setup-token path). Unlike OpenAI: system is a
+    /// separate top-level array (first block = Claude Code identity, required), messages
+    /// carry only user/assistant, and max_tokens is required. System-role messages are
+    /// lifted out into the second system block.
+    private static HttpRequestMessage BuildAnthropicRequest(
+        string model, string? token, IReadOnlyList<ChatMessage> messages)
+    {
+        var system = new List<object>
+        {
+            new { type = "text", text = AnthropicOAuth.SystemPrefix, cache_control = new { type = "ephemeral" } },
+        };
+        var userSystem = string.Join("\n\n",
+            messages.Where(m => m.Role == "system").Select(m => m.Content)).Trim();
+        if (userSystem.Length > 0)
+            system.Add(new { type = "text", text = userSystem, cache_control = new { type = "ephemeral" } });
+
+        var payload = new Dictionary<string, object>
+        {
+            ["model"] = AnthropicOAuth.ResolveModel(model),
+            ["max_tokens"] = AnthropicOAuth.MaxTokens,
+            ["stream"] = true,
+            ["system"] = system,
+            ["messages"] = messages.Where(m => m.Role != "system")
+                .Select(m => new { role = m.Role, content = m.Content }).ToArray(),
+        };
+
+        var request = new HttpRequestMessage(HttpMethod.Post, AnthropicOAuth.MessagesUrl)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+        };
+        ApplyOAuthHeaders(request, token);
+        return request;
+    }
+
+    /// Headers that make a setup token be recognized as a Claude Code compatible client.
+    private static void ApplyOAuthHeaders(HttpRequestMessage request, string? token)
+    {
+        if (!string.IsNullOrEmpty(token))
+            request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token);
+        request.Headers.TryAddWithoutValidation("accept", "application/json");
+        request.Headers.TryAddWithoutValidation("anthropic-version", AnthropicOAuth.VersionHeader);
+        request.Headers.TryAddWithoutValidation("anthropic-beta", AnthropicOAuth.BetaHeader);
+        request.Headers.TryAddWithoutValidation("user-agent", AnthropicOAuth.UserAgent);
+        request.Headers.TryAddWithoutValidation("x-app", "cli");
+        request.Headers.TryAddWithoutValidation("anthropic-dangerous-direct-browser-access", "true");
     }
 
     private static void AddAuth(HttpRequestMessage request, string? apiKey)

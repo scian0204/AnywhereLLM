@@ -18,6 +18,8 @@
 /* Settings */
 "settings.windowTitle" = "AnywhereLLM Settings";
 "settings.apiKey" = "API Key";
+"settings.apiKeyHint" = "OpenAI-compatible API key, or a Claude Pro/Max setup token from `claude setup-token` (sk-ant-oat01-…).";
+"settings.setupTokenActive" = "Claude subscription setup token detected — requests use your Claude Pro/Max plan (Base URL and provider fields are ignored).";
 "settings.model" = "Model";
 "settings.fetching" = "Fetching…";
 "settings.fetchModels" = "Fetch Models";
