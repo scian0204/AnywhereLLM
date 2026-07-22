@@ -108,6 +108,27 @@ gh release upload v<ver> build/AnywhereLLM-<ver>-macos.zip
 gh release upload v<ver> SHA256SUMS.txt --clobber
 ```
 
+## 6. Homebrew cask 갱신 (macOS — zip이 릴리즈에 올라간 뒤)
+
+macOS는 `brew install --cask scian0204/tap/anywherellm`로도 배포한다. cask는 별도 탭
+저장소 [`scian0204/homebrew-tap`](https://github.com/scian0204/homebrew-tap)의
+`Casks/anywherellm.rb`에 있고, **릴리즈의 `-macos.zip` 에셋을 받는다** — 그래서 mac zip이
+릴리즈에 올라간 뒤(4절 또는 5절) 갱신한다. `url`은 `#{version}` 템플릿이라 **`version`과
+`sha256` 두 줄만** 바꾸면 된다(`sha256` = mac zip 해시, `build/SHA256SUMS.txt`).
+
+```bash
+gh repo clone scian0204/homebrew-tap /tmp/homebrew-tap   # 기존 클론이면 git pull
+# Casks/anywherellm.rb 에서 version "x.y.z" 와 sha256 "<mac zip 해시>" 두 줄 갱신
+git -C /tmp/homebrew-tap commit -am "anywherellm <ver>"
+git -C /tmp/homebrew-tap push origin main
+# 검증(설치 아님 — 릴리즈 zip을 받아 sha256 대조):
+brew update && brew fetch --cask scian0204/tap/anywherellm
+```
+
+`brew fetch`가 `✔︎ Cask anywherellm (<ver>)`를 찍으면 sha가 맞고 사용자가
+`brew upgrade --cask anywherellm`로 받을 수 있다. sha 불일치면 `SHA256SUMS.txt` 값과
+릴리즈에 실제로 올라간 zip이 다른 것 — 재확인. (Windows는 brew 대상 아님.)
+
 ## 에셋 이름 규칙 (업데이터 계약 — 바꾸지 말 것)
 
 `UpdateService`의 `pickAsset`가 접미사로 선택하고 `parseChecksums`가 `SHA256SUMS.txt`로 검증:
