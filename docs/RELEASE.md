@@ -125,9 +125,17 @@ git -C /tmp/homebrew-tap push origin main
 brew update && brew fetch --cask scian0204/tap/anywherellm
 ```
 
-`brew fetch`가 `✔︎ Cask anywherellm (<ver>)`를 찍으면 sha가 맞고 사용자가
-`brew upgrade --cask anywherellm`로 받을 수 있다. sha 불일치면 `SHA256SUMS.txt` 값과
-릴리즈에 실제로 올라간 zip이 다른 것 — 재확인. (Windows는 brew 대상 아님.)
+`brew fetch`가 `✔︎ Cask anywherellm (<ver>)`를 찍으면 sha가 맞고 신규 설치 사용자가
+최신 버전으로 받는다. sha 불일치면 `SHA256SUMS.txt` 값과 릴리즈에 실제로 올라간 zip이
+다른 것 — 재확인. (Windows는 brew 대상 아님.)
+
+**cask는 `auto_updates true`를 선언한다 (지우지 말 것).** 앱에 자체 업데이터가 있어,
+자체 업데이트로 앱이 새 버전이 되면 brew 리시트는 설치 시점 버전에 머문다. 이 스탠자가
+없으면 `brew outdated`가 실제로는 최신인 앱을 "구버전"으로 오탐한다(과거 버그). 있으면
+plain `brew outdated`/`brew upgrade`가 이 cask를 건드리지 않고 갱신을 앱에 위임한다
+(신규 설치는 여전히 최신). 그래서 이 절차의 cask 갱신은 **신규 설치 사용자용 최신 버전
+제공**이 목적이지, 기존 설치자의 자동 갱신 수단이 아니다(그건 인앱 업데이터가 담당).
+기존 설치자가 brew 리시트 숫자까지 맞추려면 1회 `brew reinstall --cask anywherellm`.
 
 ## 에셋 이름 규칙 (업데이터 계약 — 바꾸지 말 것)
 
