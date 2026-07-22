@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using AnywhereLLM.Services;
 
@@ -39,6 +41,7 @@ public partial class PromptWindow : Window
         c.OnStreamingInsertError += () => { if (_controller == c) ShowAndActivate(); };
 
         LoadProfiles();
+        SetThumbnail(ctx.Image);
         InputBox.Text = "";
         Render();
 
@@ -60,6 +63,28 @@ public partial class PromptWindow : Window
     {
         _controller = null;
         _context = null;
+    }
+
+    /// 캡쳐한 이미지 썸네일 표시 (Present에서 1회) — 무엇을 질의 중인지 확인용.
+    private void SetThumbnail(byte[]? png)
+    {
+        if (png is null || png.Length == 0)
+        {
+            ThumbImage.Source = null;
+            ThumbImage.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var bmp = new BitmapImage();
+        using (var ms = new MemoryStream(png))
+        {
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad; // decode now so the stream can close
+            bmp.StreamSource = ms;
+            bmp.EndInit();
+        }
+        bmp.Freeze();
+        ThumbImage.Source = bmp;
+        ThumbImage.Visibility = Visibility.Visible;
     }
 
     public void Dismiss()
@@ -112,7 +137,9 @@ public partial class PromptWindow : Window
         ErrorText.Visibility = string.IsNullOrEmpty(c.ErrorMessage) ? Visibility.Collapsed : Visibility.Visible;
 
         InputHint.Text = transcript
-            ? (c.HasSelection && c.TranscriptIsEmpty ? Loc.L("input.instructFirst") : Loc.L("input.instruct"))
+            ? (c.TranscriptIsEmpty && c.HasImage ? Loc.L("input.imageFirst")
+               : c.HasSelection && c.TranscriptIsEmpty ? Loc.L("input.instructFirst")
+               : Loc.L("input.instruct"))
             : Loc.L("input.ask");
         InputHint.Visibility = string.IsNullOrEmpty(InputBox.Text) ? Visibility.Visible : Visibility.Collapsed;
 

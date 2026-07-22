@@ -19,11 +19,17 @@ struct SettingsView: View {
     @AppStorage("includeFullText") private var includeFullText = false
     @AppStorage("hotkeyKeyCode") private var hotkeyKeyCode = kVK_Space
     @AppStorage("hotkeyModifiers") private var hotkeyModifiers = Int(cmdKey | shiftKey)
+    @AppStorage("captureHotkeyKeyCode") private var captureHotkeyKeyCode = kVK_ANSI_2
+    @AppStorage("captureHotkeyModifiers") private var captureHotkeyModifiers = Int(cmdKey | shiftKey)
 
     // Keychain is not @AppStorage — load on appear, write on commit.
     @State private var apiKey = ""
-    @State private var recording = false
+    /// 현재 녹화 중인 핫키(둘 중 하나) — nil이면 녹화 안 함.
+    @State private var recordingTarget: HotkeyTarget?
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+
+    /// 설정에서 녹화 가능한 두 핫키. 각자 UserDefaults 키 쌍에 저장.
+    enum HotkeyTarget { case panel, capture }
 
     // Hotkey recorder monitor handle; removed when recording stops or view disappears.
     @State private var monitor: Any?
@@ -122,14 +128,10 @@ struct SettingsView: View {
             }
 
             Section(L("settings.hotkey")) {
-                HStack {
-                    Text(hotkeyDisplay)
-                        .font(.system(.body, design: .monospaced))
-                    Spacer()
-                    Button(recording ? L("settings.recordingKeys") : L("settings.record")) {
-                        recording ? stopRecording() : startRecording()
-                    }
-                }
+                hotkeyRow(label: L("settings.hotkeyPanel"), target: .panel,
+                          display: modifierSymbols(hotkeyModifiers) + keyName(hotkeyKeyCode))
+                hotkeyRow(label: L("settings.hotkeyCapture"), target: .capture,
+                          display: modifierSymbols(captureHotkeyModifiers) + keyName(captureHotkeyKeyCode))
             }
 
             Section(L("settings.system")) {
@@ -243,14 +245,35 @@ struct SettingsView: View {
 
     // MARK: - Hotkey recording
 
-    private func startRecording() {
-        recording = true
+    /// 한 핫키의 라벨 + 조합 표시 + 녹화 버튼 행.
+    @ViewBuilder
+    private func hotkeyRow(label: String, target: HotkeyTarget, display: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(display)
+                .font(.system(.body, design: .monospaced))
+            Button(recordingTarget == target ? L("settings.recordingKeys") : L("settings.record")) {
+                recordingTarget == target ? stopRecording() : startRecording(target)
+            }
+        }
+    }
+
+    private func startRecording(_ target: HotkeyTarget) {
+        stopRecording() // 다른 행이 녹화 중이면 먼저 정리
+        recordingTarget = target
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let carbon = carbonModifiers(from: event.modifierFlags)
             // Require at least one modifier so we don't grab a bare key.
             guard carbon != 0 else { return nil }
-            hotkeyKeyCode = Int(event.keyCode)
-            hotkeyModifiers = Int(carbon)
+            switch target {
+            case .panel:
+                hotkeyKeyCode = Int(event.keyCode)
+                hotkeyModifiers = Int(carbon)
+            case .capture:
+                captureHotkeyKeyCode = Int(event.keyCode)
+                captureHotkeyModifiers = Int(carbon)
+            }
             stopRecording()
             onHotkeyChanged()
             return nil // swallow — don't let the combo type into the field
@@ -260,7 +283,7 @@ struct SettingsView: View {
     private func stopRecording() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
-        recording = false
+        recordingTarget = nil
     }
 
     // MARK: - Launch at login
@@ -276,10 +299,6 @@ struct SettingsView: View {
     }
 
     // MARK: - Display
-
-    private var hotkeyDisplay: String {
-        modifierSymbols(hotkeyModifiers) + keyName(hotkeyKeyCode)
-    }
 
     /// 평문 http로 loopback이 아닌 호스트(LAN LiteLLM/프록시 등)에 API 키를 보내면
     /// 같은 네트워크의 누구나 스니핑할 수 있다. ATS는 IP 리터럴/.local을 예외 처리하므로
@@ -370,6 +389,10 @@ func keyName(_ keyCode: Int) -> String {
     case kVK_ANSI_T: return "T"; case kVK_ANSI_U: return "U"; case kVK_ANSI_V: return "V"
     case kVK_ANSI_W: return "W"; case kVK_ANSI_X: return "X"; case kVK_ANSI_Y: return "Y"
     case kVK_ANSI_Z: return "Z"
+    case kVK_ANSI_0: return "0"; case kVK_ANSI_1: return "1"; case kVK_ANSI_2: return "2"
+    case kVK_ANSI_3: return "3"; case kVK_ANSI_4: return "4"; case kVK_ANSI_5: return "5"
+    case kVK_ANSI_6: return "6"; case kVK_ANSI_7: return "7"; case kVK_ANSI_8: return "8"
+    case kVK_ANSI_9: return "9"
     default: return String(format: "key 0x%02X", keyCode)
     }
 }

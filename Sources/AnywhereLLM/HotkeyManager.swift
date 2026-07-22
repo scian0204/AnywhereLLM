@@ -1,61 +1,72 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Global hotkey via Carbon RegisterEventHotKey. Fires even when the app is not active
-/// and needs no accessibility permission for the registration itself.
+/// Global hotkeys via Carbon RegisterEventHotKey. Fires even when the app is not
+/// active and needs no accessibility permission for the registration itself.
 ///
-/// Defaults (overridable via UserDefaults, settings UI comes in step 6):
-///   "hotkeyKeyCode"   — virtual key code (default kVK_Space)
-///   "hotkeyModifiers" — Carbon modifier mask (default cmd+shift)
+/// Holds one or more `Hotkey` bindings, each with its own Carbon id, its own pair
+/// of UserDefaults keys, and its own action. A single installed Carbon event
+/// handler routes by the fired hotkey's id — using one handler (not one per
+/// binding) avoids event-chain ambiguity when several hotkeys share our signature.
 @MainActor
 final class HotkeyManager {
-    // nonisolated(unsafe): main에서만 변경되는 Carbon 포인터. nonisolated deinit이
-    // 정리하려면 격리를 벗겨야 한다 — deinit은 배타적 접근이라 레이스 없음.
-    nonisolated(unsafe) private var hotKeyRef: EventHotKeyRef?
-    nonisolated(unsafe) private var eventHandler: EventHandlerRef?
-    private let handler: () -> Void
-
-    // Carbon signature ('ALLM') + id; only one hotkey so id is fixed.
-    private static let signature: OSType = 0x414C4C4D // 'ALLM'
-    private let hotKeyID = EventHotKeyID(signature: HotkeyManager.signature, id: 1)
-
-    init(handler: @escaping () -> Void) {
-        self.handler = handler
+    /// One registered global hotkey: Carbon id, the UserDefaults keys holding its
+    /// combo, safe defaults, and what to run when it fires.
+    struct Hotkey {
+        let id: UInt32
+        let keyCodeDefaultsKey: String
+        let modifiersDefaultsKey: String
+        let defaultKeyCode: UInt32
+        let defaultModifiers: UInt32
+        let action: () -> Void
     }
 
-    /// Register the hotkey and install the Carbon event handler. Idempotent.
-    /// Returns false if the handler install or the registration failed (e.g.
-    /// eventHotKeyExistsErr when another app owns the combo) so the caller can
-    /// surface it — a menubar-only app whose sole trigger silently dies is unusable.
+    // nonisolated(unsafe): main에서만 변경되는 Carbon 포인터. nonisolated deinit이
+    // 정리하려면 격리를 벗겨야 한다 — deinit은 배타적 접근이라 레이스 없음.
+    nonisolated(unsafe) private var eventHandler: EventHandlerRef?
+    nonisolated(unsafe) private var refs: [UInt32: EventHotKeyRef] = [:] // id → ref
+    let hotkeys: [Hotkey]
+
+    // Carbon signature ('ALLM') shared by every binding; the id disambiguates.
+    private static let signature: OSType = 0x414C4C4D // 'ALLM'
+
+    init(hotkeys: [Hotkey]) {
+        self.hotkeys = hotkeys
+    }
+
+    /// Register every not-yet-registered hotkey from current settings. Idempotent
+    /// (an already-registered id is skipped). Returns the ids that FAILED to
+    /// register (empty = all good) so the caller can surface a conflict per hotkey.
     @discardableResult
-    func start() -> Bool {
-        guard hotKeyRef == nil else { return true }
+    func start() -> [UInt32] {
+        guard installHandlerIfNeeded() else { return hotkeys.map(\.id) }
 
-        guard installHandlerIfNeeded() else { return false }
+        var failed: [UInt32] = []
+        for hk in hotkeys where refs[hk.id] == nil {
+            // UserDefaults는 검증 대상 신뢰 경계다 — 범위 밖 값(음수/초과)에 트래핑
+            // UInt32(Int) 이니셜라이저는 실행 즉시 크래시하고 값이 저장돼 매 실행
+            // 크래시한다. exactly로 안전 폴백.
+            let keyCode = (UserDefaults.standard.object(forKey: hk.keyCodeDefaultsKey) as? Int)
+                .flatMap { UInt32(exactly: $0) } ?? hk.defaultKeyCode
+            let modifiers = (UserDefaults.standard.object(forKey: hk.modifiersDefaultsKey) as? Int)
+                .flatMap { UInt32(exactly: $0) } ?? hk.defaultModifiers
 
-        // UserDefaults는 검증 대상 신뢰 경계다 — 손상된 plist나 외부 프로세스가 쓴
-        // 범위 밖 값(음수/초과)에 대해 트래핑 UInt32(Int) 이니셜라이저는 실행 즉시
-        // 크래시하고, 값이 저장돼 있어 매 실행 크래시한다. exactly로 안전 폴백.
-        let keyCode = (UserDefaults.standard.object(forKey: "hotkeyKeyCode") as? Int)
-            .flatMap { UInt32(exactly: $0) } ?? UInt32(kVK_Space)
-        let modifiers = (UserDefaults.standard.object(forKey: "hotkeyModifiers") as? Int)
-            .flatMap { UInt32(exactly: $0) } ?? UInt32(cmdKey | shiftKey)
-
-        var ref: EventHotKeyRef?
-        let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetEventDispatcherTarget(), 0, &ref)
-        if status == noErr {
-            hotKeyRef = ref
-            return true
+            var ref: EventHotKeyRef?
+            let hotKeyID = EventHotKeyID(signature: Self.signature, id: hk.id)
+            let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetEventDispatcherTarget(), 0, &ref)
+            if status == noErr, let ref {
+                refs[hk.id] = ref
+            } else {
+                failed.append(hk.id)
+                NSLog("AnywhereLLM: RegisterEventHotKey failed (\(status)) for id \(hk.id) — likely a conflict.")
+            }
         }
-        NSLog("AnywhereLLM: RegisterEventHotKey failed (\(status)) — likely a system-wide conflict.")
-        return false
+        return failed
     }
 
     func stop() {
-        if let ref = hotKeyRef {
-            UnregisterEventHotKey(ref)
-            hotKeyRef = nil
-        }
+        for (_, ref) in refs { UnregisterEventHotKey(ref) }
+        refs.removeAll()
     }
 
     @discardableResult
@@ -77,8 +88,14 @@ final class HotkeyManager {
                 )
                 guard err == noErr, firedID.signature == HotkeyManager.signature else { return noErr }
                 let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
-                // Callback runs on the main run loop; hop to the main actor for the Swift-side handler.
-                DispatchQueue.main.async { MainActor.assumeIsolated { manager.handler() } }
+                let firedId = firedID.id
+                // Callback runs on the main run loop; hop to the main actor to run the
+                // matching binding's action.
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        manager.hotkeys.first { $0.id == firedId }?.action()
+                    }
+                }
                 return noErr
             },
             1, &spec, selfPtr, &eventHandler
@@ -96,6 +113,6 @@ final class HotkeyManager {
     // 메모리를 참조(use-after-free)한다. deinit에서 확실히 정리해 하자를 봉인.
     deinit {
         if let eventHandler { RemoveEventHandler(eventHandler) }
-        if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
+        for (_, ref) in refs { UnregisterEventHotKey(ref) }
     }
 }

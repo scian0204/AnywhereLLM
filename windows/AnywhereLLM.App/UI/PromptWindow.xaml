@@ -21,6 +21,9 @@
                    VerticalAlignment="Center" Opacity="0.5" FontSize="11"/>
       </DockPanel>
 
+      <Image x:Name="ThumbImage" MaxHeight="160" Margin="0,0,0,8" Stretch="Uniform"
+             HorizontalAlignment="Left" Visibility="Collapsed"/>
+
       <TextBlock x:Name="SelectionPreview" TextWrapping="Wrap" MaxHeight="42" Margin="0,0,0,8"
                  Opacity="0.7" TextTrimming="CharacterEllipsis" Visibility="Collapsed"/>
 

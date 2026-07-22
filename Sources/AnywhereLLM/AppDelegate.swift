@@ -10,8 +10,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 정상(비-경고) 메뉴바 아이콘. 경고 표시 후 이 고정 이미지로 되돌린다 —
     /// 호출 시점의 현재 아이콘을 캡처해 복원하면 연속 경고 시 경고 아이콘이 고착된다.
     private var normalStatusIcon: NSImage?
-    /// 마지막으로 등록에 성공한 핫키(keyCode, modifiers). 새 조합 등록 실패 시 복구용.
-    private var lastGoodHotkey: (Int, Int)?
+    /// 마지막으로 등록에 성공한 핫키(id → (keyCode, modifiers)). 새 조합 등록 실패 시 복구용.
+    private var lastGoodHotkeys: [UInt32: (Int, Int)] = [:]
+
+    /// 등록 핫키 정의(id + UserDefaults 키 + 기본값). 매니저 구성과 충돌 복구가 공유.
+    private struct HotkeyDef {
+        let id: UInt32
+        let keyCodeKey: String
+        let modifiersKey: String
+        let defaultKeyCode: Int
+        let defaultModifiers: Int
+    }
+    private static let panelHotkey = HotkeyDef(
+        id: 1, keyCodeKey: "hotkeyKeyCode", modifiersKey: "hotkeyModifiers",
+        defaultKeyCode: kVK_Space, defaultModifiers: Int(cmdKey | shiftKey))
+    private static let captureHotkey = HotkeyDef(
+        id: 2, keyCodeKey: "captureHotkeyKeyCode", modifiersKey: "captureHotkeyModifiers",
+        defaultKeyCode: kVK_ANSI_2, defaultModifiers: Int(cmdKey | shiftKey))
+    private static var hotkeyDefs: [HotkeyDef] { [panelHotkey, captureHotkey] }
 
     private var hotkeyManager: HotkeyManager?
     private var promptPanel: PromptPanel?
@@ -34,13 +50,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (빈 값이면 삭제). 이때 프롬프트가 떠도 마지막 — 이후 조용히 읽힌다.
         if let key = KeychainStore.get() { KeychainStore.set(key) }
 
-        let hotkey = HotkeyManager { [weak self] in self?.togglePanel() }
-        hotkeyManager = hotkey
-        if hotkey.start() {
-            lastGoodHotkey = Self.currentHotkeyDefaults()
-        } else {
-            warnHotkeyConflict() // 기본 조합이 이미 다른 앱에 잡혀 있음
-        }
+        let manager = HotkeyManager(hotkeys: [
+            HotkeyManager.Hotkey(
+                id: Self.panelHotkey.id,
+                keyCodeDefaultsKey: Self.panelHotkey.keyCodeKey,
+                modifiersDefaultsKey: Self.panelHotkey.modifiersKey,
+                defaultKeyCode: UInt32(Self.panelHotkey.defaultKeyCode),
+                defaultModifiers: UInt32(Self.panelHotkey.defaultModifiers),
+                action: { [weak self] in self?.togglePanel() }),
+            HotkeyManager.Hotkey(
+                id: Self.captureHotkey.id,
+                keyCodeDefaultsKey: Self.captureHotkey.keyCodeKey,
+                modifiersDefaultsKey: Self.captureHotkey.modifiersKey,
+                defaultKeyCode: UInt32(Self.captureHotkey.defaultKeyCode),
+                defaultModifiers: UInt32(Self.captureHotkey.defaultModifiers),
+                action: { [weak self] in self?.captureScreenRegion() }),
+        ])
+        hotkeyManager = manager
+        let failed = manager.start()
+        recordGoodHotkeys(excluding: failed)
+        if !failed.isEmpty { warnHotkeyConflict() } // 기본/저장 조합이 다른 앱에 잡혀 있음
 
         // Re-register the global hotkey immediately when the settings recorder saves a new one.
         SettingsWindowController.shared.onHotkeyChanged = { [weak self] in
@@ -118,17 +147,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 핫키 재등록 실패(다른 앱이 조합 선점)를 알리고 직전 조합으로 복구 — 메뉴바
     /// 전용 앱의 유일한 진입점이 조용히 죽지 않게 한다.
     private func reapplyHotkey() {
-        hotkeyManager?.stop()
-        if hotkeyManager?.start() == true {
-            lastGoodHotkey = Self.currentHotkeyDefaults()
+        guard let manager = hotkeyManager else { return }
+        manager.stop()
+        let failed = manager.start()
+        if failed.isEmpty {
+            recordGoodHotkeys(excluding: [])
             return
         }
         warnHotkeyConflict()
-        if let (keyCode, modifiers) = lastGoodHotkey {
-            UserDefaults.standard.set(keyCode, forKey: "hotkeyKeyCode")
-            UserDefaults.standard.set(modifiers, forKey: "hotkeyModifiers")
-            hotkeyManager?.start() // 직전 조합 재등록 — 앱은 계속 열 수 있다
+        // 실패한 핫키만 직전 조합으로 되돌린다 — 성공한 다른 핫키의 새 조합은 유지.
+        for id in failed {
+            if let (keyCode, modifiers) = lastGoodHotkeys[id],
+               let def = Self.hotkeyDefs.first(where: { $0.id == id }) {
+                UserDefaults.standard.set(keyCode, forKey: def.keyCodeKey)
+                UserDefaults.standard.set(modifiers, forKey: def.modifiersKey)
+            }
         }
+        manager.stop()
+        let stillFailed = manager.start() // 되돌린 조합으로 재등록 — 앱은 계속 열 수 있다
+        recordGoodHotkeys(excluding: stillFailed)
     }
 
     private func warnHotkeyConflict() {
@@ -139,11 +176,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.runModal()
     }
 
-    private static func currentHotkeyDefaults() -> (Int, Int) {
+    /// 방금 (재)등록에 성공한 핫키들의 현재 조합을 직전-정상 값으로 기록.
+    private func recordGoodHotkeys(excluding failed: [UInt32]) {
         let d = UserDefaults.standard
-        let keyCode = d.object(forKey: "hotkeyKeyCode") as? Int ?? Int(kVK_Space)
-        let modifiers = d.object(forKey: "hotkeyModifiers") as? Int ?? Int(cmdKey | shiftKey)
-        return (keyCode, modifiers)
+        for def in Self.hotkeyDefs where !failed.contains(def.id) {
+            let keyCode = d.object(forKey: def.keyCodeKey) as? Int ?? def.defaultKeyCode
+            let modifiers = d.object(forKey: def.modifiersKey) as? Int ?? def.defaultModifiers
+            lastGoodHotkeys[def.id] = (keyCode, modifiers)
+        }
+    }
+
+    // MARK: - Screen capture (image query)
+
+    /// 두 번째 핫키: 화면 영역을 드래그로 캡쳐(⌘⇧4식)해 이미지 질의 패널을 띄운다.
+    /// 접근성 권한은 불필요(보기 전용, 삽입 없음) — 화면 기록 권한만 필요.
+    private func captureScreenRegion() {
+        // 화면 기록 권한이 없으면 캡쳐가 빈/데스크톱 이미지가 된다 — 요청 + 안내 후
+        // 이번 캡쳐는 중단(권한은 앱 재시작 후 적용된다).
+        guard CGPreflightScreenCaptureAccess() else {
+            CGRequestScreenCaptureAccess()
+            warnScreenRecordingNeeded()
+            return
+        }
+        // 진행 중이던 세션은 무조건 정리 — immediate 타이핑 중엔 패널이 숨겨져(orderOut)
+        // isVisible이 false라, 조건부 dismiss면 스트림이 캡쳐 드래그 동안에도 계속
+        // 대상 앱에 타이핑된다. dismiss()는 숨겨진/미표시 패널에도 안전.
+        promptPanel?.dismiss()
+        // screencapture -i는 사용자 드래그 동안 블록 — 백그라운드에서 실행, 결과만 main에서.
+        Task.detached {
+            let png = ScreenCapture.captureRegion()
+            await MainActor.run { self.presentImagePanel(png) }
+        }
+    }
+
+    /// 캡쳐 PNG로 보기 전용 이미지 컨텍스트를 만들어 기존 패널을 띄운다.
+    private func presentImagePanel(_ png: Data?) {
+        guard let png, !png.isEmpty else { return } // 취소/실패 — 패널 안 띄움
+        let panel = promptPanel ?? {
+            let p = PromptPanel()
+            promptPanel = p
+            return p
+        }()
+        let app = NSWorkspace.shared.frontmostApplication
+        let context = TargetContext(
+            appName: app?.localizedName, bundleId: app?.bundleIdentifier,
+            selectedText: nil, fullText: nil,
+            isSecureField: false, isEditable: false, axElement: nil, image: png)
+        panel.present(context: context)
+        // 이미지 컨텍스트엔 앵커 요소가 없다 — 마우스(=선택 직후 위치) 폴백으로 위치.
+        panel.setFrameOrigin(PanelPositioner.origin(for: panel.frame.size, anchor: nil))
+        panel.anchorTopLeft()
+        panel.orderFrontRegardless()
+        panel.makeKey()
+        panel.focusInput()
+    }
+
+    private func warnScreenRecordingNeeded() {
+        let alert = NSAlert()
+        alert.messageText = L("screenRecording.neededTitle")
+        alert.informativeText = L("screenRecording.neededMessage")
+        alert.addButton(withTitle: L("screenRecording.openSettings"))
+        alert.addButton(withTitle: L("common.cancel"))
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     // MARK: - Accessibility

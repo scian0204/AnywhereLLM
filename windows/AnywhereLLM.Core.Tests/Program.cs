@@ -170,6 +170,24 @@ t.Eq("Update.checksumBinaryMarker",
     "0000000000000000000000000000000000000000000000000000000000000000");
 t.Eq("Update.checksumCount", sums.Count, 2);
 
+// ---- ChatImageContent --------------------------------------------------------
+static string J(object o) => System.Text.Json.JsonSerializer.Serialize(o);
+t.Eq("Img.openAINoImageIsString", ChatImageContent.OpenAI("hi", null), (object)"hi");
+t.Eq("Img.openAIEmptyImageIsString", ChatImageContent.OpenAI("hi", ""), (object)"hi");
+t.Eq("Img.openAIWithImage",
+    J(ChatImageContent.OpenAI("what", "AAAB")),
+    """[{"type":"text","text":"what"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAB"}}]""");
+t.Eq("Img.openAIEmptyTextOmitsTextPart",
+    J(ChatImageContent.OpenAI("", "AAAB")),
+    """[{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAB"}}]""");
+t.Eq("Img.anthropicNoImageIsString", ChatImageContent.Anthropic("hi", null), (object)"hi");
+t.Eq("Img.anthropicWithImage",
+    J(ChatImageContent.Anthropic("hi", "ZZ9")),
+    """[{"type":"text","text":"hi"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"ZZ9"}}]""");
+t.Eq("Img.ollamaImagesRawBase64", string.Join(",", ChatImageContent.OllamaImages("AAAB")!), "AAAB");
+t.Eq("Img.ollamaImagesNull", ChatImageContent.OllamaImages(null) == null, true);
+t.Eq("Img.ollamaImagesEmpty", ChatImageContent.OllamaImages("") == null, true);
+
 return t.Report();
 
 sealed class Runner

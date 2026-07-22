@@ -16,7 +16,10 @@ public sealed record TargetContext(
     string? FullText,
     bool IsSecureField,
     bool IsEditable,
-    Rect? CaretPhysical);
+    Rect? CaretPhysical,
+    // 스크린 캡쳐 이미지 질의의 PNG 바이트. 텍스트 캡처 경로에선 null (기본).
+    // 있으면 IsEditable=false로 구성되어 기존 보기 전용 흐름을 그대로 탄다.
+    byte[]? Image = null);
 
 /// Read/write for the system-wide focused text element. Reads prefer UIA
 /// (TextPattern selection, ValuePattern value) with a clipboard-backed Ctrl+C

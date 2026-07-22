@@ -4,6 +4,9 @@ import LLMCore
 struct ChatMessage: Codable {
     let role: String
     let content: String
+    /// Base64 PNG attached to this message (image query). nil for text turns.
+    /// `var` with a default so existing call sites stay memberwise-init compatible.
+    var imageBase64: String?
 }
 
 enum LLMError: LocalizedError {
@@ -219,7 +222,17 @@ final class LLMClient {
         var body: [String: Any] = [
             "model": model,
             "stream": true,
-            "messages": messages.map { ["role": $0.role, "content": $0.content] },
+            "messages": messages.map { m -> [String: Any] in
+                if ollamaNative {
+                    // Ollama native: image is a sibling `images:[b64]` key, content stays a string.
+                    var dict: [String: Any] = ["role": m.role, "content": m.content]
+                    if let images = ChatImageContent.ollamaImages(m.imageBase64) { dict["images"] = images }
+                    return dict
+                }
+                // OpenAI-compatible: content becomes a text+image_url parts array when an image is present.
+                return ["role": m.role,
+                        "content": ChatImageContent.openAI(text: m.content, imageBase64: m.imageBase64)]
+            },
         ]
         if ollamaNative {
             body["think"] = false // 네이티브 API만 인식 — 생각 토큰 생성 자체를 차단
@@ -258,7 +271,8 @@ final class LLMClient {
         }
 
         let convo = messages.filter { $0.role != "system" }
-            .map { ["role": $0.role, "content": $0.content] }
+            .map { ["role": $0.role,
+                    "content": ChatImageContent.anthropic(text: $0.content, imageBase64: $0.imageBase64)] }
         let body: [String: Any] = [
             "model": AnthropicOAuth.resolveModel(model),
             "max_tokens": AnthropicOAuth.maxTokens,

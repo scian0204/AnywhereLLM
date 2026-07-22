@@ -78,6 +78,9 @@ struct ConversationView: View {
 
     private var selectMode: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let data = controller.capturedImageData, let image = NSImage(data: data) {
+                imageThumbnail(image)
+            }
             if let selection = controller.selectionPreview {
                 selectionPreview(selection)
             }
@@ -90,9 +93,7 @@ struct ConversationView: View {
             if let error = controller.errorMessage { errorText(error) }
 
             HStack(alignment: .bottom, spacing: 8) {
-                inputField(placeholder: controller.hasSelection && controller.transcript.isEmpty
-                    ? L("input.instructFirst")
-                    : L("input.instruct"))
+                inputField(placeholder: firstTurnPlaceholder)
                 if controller.isStreaming {
                     ProgressView().controlSize(.small)
                 }
@@ -104,7 +105,25 @@ struct ConversationView: View {
         }
     }
 
+    /// 첫 턴 입력창 placeholder: 이미지·선택은 빈 ⏎ 전송 안내, 그 외는 일반 지시.
+    private var firstTurnPlaceholder: String {
+        guard controller.transcript.isEmpty else { return L("input.instruct") }
+        if controller.hasImage { return L("input.imageFirst") }
+        if controller.hasSelection { return L("input.instructFirst") }
+        return L("input.instruct")
+    }
+
     // MARK: - Shared pieces
+
+    /// 캡쳐한 이미지 썸네일 — 무엇을 질의 중인지 확인용.
+    private func imageThumbnail(_ image: NSImage) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: .infinity, maxHeight: 160, alignment: .leading)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary, lineWidth: 1))
+    }
 
     private func inputField(placeholder: String) -> some View {
         TextField(placeholder, text: $input, axis: .vertical)

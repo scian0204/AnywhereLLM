@@ -66,10 +66,18 @@
       </GroupBox>
 
       <GroupBox x:Name="HotkeyGroup" Padding="8" Margin="0,0,0,12">
-        <DockPanel>
-          <Button x:Name="RecordButton" DockPanel.Dock="Right" Padding="8,2" Click="RecordButton_Click"/>
-          <TextBlock x:Name="HotkeyDisplay" VerticalAlignment="Center" FontFamily="Consolas"/>
-        </DockPanel>
+        <StackPanel>
+          <DockPanel Margin="0,0,0,6">
+            <TextBlock x:Name="HotkeyPanelLabel" DockPanel.Dock="Left" VerticalAlignment="Center" MinWidth="110"/>
+            <Button x:Name="RecordButton" DockPanel.Dock="Right" Padding="8,2" Click="RecordButton_Click"/>
+            <TextBlock x:Name="HotkeyDisplay" VerticalAlignment="Center" TextAlignment="Right" FontFamily="Consolas"/>
+          </DockPanel>
+          <DockPanel>
+            <TextBlock x:Name="HotkeyCaptureLabel" DockPanel.Dock="Left" VerticalAlignment="Center" MinWidth="110"/>
+            <Button x:Name="RecordCaptureButton" DockPanel.Dock="Right" Padding="8,2" Click="RecordCaptureButton_Click"/>
+            <TextBlock x:Name="CaptureHotkeyDisplay" VerticalAlignment="Center" TextAlignment="Right" FontFamily="Consolas"/>
+          </DockPanel>
+        </StackPanel>
       </GroupBox>
 
       <GroupBox x:Name="SystemGroup" Padding="8">

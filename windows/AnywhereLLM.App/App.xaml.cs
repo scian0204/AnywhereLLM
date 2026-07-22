@@ -23,8 +23,16 @@ public partial class App : Application
         ThemeManager.Initialize(); // light/dark following the OS, before any window shows
         SetupTray();
 
-        _hotkey = new HotkeyManager(() => Dispatcher.Invoke(TogglePanel));
-        if (!_hotkey.Start()) WarnHotkeyConflict();
+        _hotkey = new HotkeyManager(new[]
+        {
+            new HotkeyManager.Hotkey(1, "hotkeyKeyCode", "hotkeyModifiers",
+                HotkeyManager.DefaultKeyCode, HotkeyManager.DefaultModifiers,
+                () => Dispatcher.Invoke(TogglePanel)),
+            new HotkeyManager.Hotkey(2, "captureHotkeyKeyCode", "captureHotkeyModifiers",
+                HotkeyManager.DefaultCaptureKeyCode, HotkeyManager.DefaultCaptureModifiers,
+                () => Dispatcher.Invoke(CaptureRegionAndPrompt)),
+        });
+        if (_hotkey.Start().Count > 0) WarnHotkeyConflict();
 
         UpdateService.CleanupOldExe();                  // clear a previous update's "<exe>.old"
         _ = CheckForUpdatesAsync(auto: true);           // silent auto-check on launch
@@ -65,13 +73,27 @@ public partial class App : Application
         _panel.Present(ctx);
     }
 
+    /// 두 번째 핫키: 화면 영역을 드래그로 캡쳐(Win+Shift+S식)해 이미지 질의 패널을 띄운다.
+    /// 보기 전용 컨텍스트라 결과는 패널에 남고 어디에도 삽입되지 않는다.
+    private void CaptureRegionAndPrompt()
+    {
+        // 진행 중이던 세션은 무조건 정리 — immediate 타이핑 중엔 패널이 숨겨져 있어
+        // 조건부 dismiss면 스트림이 캡쳐 드래그 동안에도 계속 타이핑된다.
+        _panel?.Dismiss();
+        var png = RegionCapture.CaptureRegion();
+        if (png is null || png.Length == 0) return; // cancelled / failed
+        _panel ??= new PromptWindow();
+        var ctx = new TargetContext(null, IntPtr.Zero, null, null, false, false, null, png);
+        _panel.Present(ctx);
+    }
+
     private void OpenSettings()
         => SettingsWindow.ShowSingleton(ReapplyHotkey);
 
     private void ReapplyHotkey()
     {
         _hotkey?.Stop();
-        if (_hotkey?.Start() == false) WarnHotkeyConflict();
+        if (_hotkey?.Start().Count > 0) WarnHotkeyConflict();
     }
 
     private void WarnHotkeyConflict()

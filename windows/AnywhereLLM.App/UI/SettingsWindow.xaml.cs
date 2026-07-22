@@ -21,7 +21,9 @@ public partial class SettingsWindow : Window
     private Action? _onHotkeyChanged;
     private List<PromptProfile> _profiles = new();
     private bool _loading;
-    private bool _recording;
+    private HotkeyTarget? _recordingTarget;
+
+    private enum HotkeyTarget { Panel, Capture }
 
     public static void ShowSingleton(Action onHotkeyChanged)
     {
@@ -64,6 +66,8 @@ public partial class SettingsWindow : Window
         RenameProfileButton.Content = Loc.L("settings.rename");
         DeleteProfileButton.Content = Loc.L("settings.delete");
         HotkeyGroup.Header = Loc.L("settings.hotkey");
+        HotkeyPanelLabel.Text = Loc.L("settings.hotkeyPanel");
+        HotkeyCaptureLabel.Text = Loc.L("settings.hotkeyCapture");
         SystemGroup.Header = Loc.L("settings.system");
         LaunchAtLoginBox.Content = Loc.L("settings.launchAtLogin");
 
@@ -279,23 +283,29 @@ public partial class SettingsWindow : Window
 
     // MARK: - Hotkey recording
 
-    private void RecordButton_Click(object s, RoutedEventArgs e)
+    private void RecordButton_Click(object s, RoutedEventArgs e) => ToggleRecording(HotkeyTarget.Panel);
+    private void RecordCaptureButton_Click(object s, RoutedEventArgs e) => ToggleRecording(HotkeyTarget.Capture);
+
+    private void ToggleRecording(HotkeyTarget target)
     {
-        if (_recording) { StopRecording(); return; }
-        _recording = true;
-        RecordButton.Content = Loc.L("settings.recordingKeys");
+        if (_recordingTarget == target) { StopRecording(); return; }
+        StopRecording(); // cancel the other row if it was recording
+        _recordingTarget = target;
+        (target == HotkeyTarget.Panel ? RecordButton : RecordCaptureButton).Content = Loc.L("settings.recordingKeys");
         PreviewKeyDown += RecordKeyDown;
     }
 
     private void StopRecording()
     {
-        _recording = false;
+        _recordingTarget = null;
         PreviewKeyDown -= RecordKeyDown;
         RecordButton.Content = Loc.L("settings.record");
+        RecordCaptureButton.Content = Loc.L("settings.record");
     }
 
     private void RecordKeyDown(object s, KeyEventArgs e)
     {
+        if (_recordingTarget is not { } target) return;
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftShift or Key.RightShift
                  or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin)
@@ -309,8 +319,11 @@ public partial class SettingsWindow : Window
         if ((m & ModifierKeys.Windows) != 0) mods |= NativeMethods.MOD_WIN;
         if (mods == 0) { e.Handled = true; return; } // require a modifier
 
-        AppSettings.Set("hotkeyKeyCode", KeyInterop.VirtualKeyFromKey(key));
-        AppSettings.Set("hotkeyModifiers", (int)mods);
+        var (vkKey, modKey) = target == HotkeyTarget.Panel
+            ? ("hotkeyKeyCode", "hotkeyModifiers")
+            : ("captureHotkeyKeyCode", "captureHotkeyModifiers");
+        AppSettings.Set(vkKey, KeyInterop.VirtualKeyFromKey(key));
+        AppSettings.Set(modKey, (int)mods);
         e.Handled = true;
         StopRecording();
         UpdateHotkeyDisplay();
@@ -319,15 +332,23 @@ public partial class SettingsWindow : Window
 
     private void UpdateHotkeyDisplay()
     {
-        uint mods = (uint)AppSettings.GetInt("hotkeyModifiers", (int)HotkeyManager.DefaultModifiers);
-        int vk = AppSettings.GetInt("hotkeyKeyCode", HotkeyManager.DefaultKeyCode);
+        HotkeyDisplay.Text = FormatHotkey("hotkeyModifiers", "hotkeyKeyCode",
+            HotkeyManager.DefaultModifiers, HotkeyManager.DefaultKeyCode);
+        CaptureHotkeyDisplay.Text = FormatHotkey("captureHotkeyModifiers", "captureHotkeyKeyCode",
+            HotkeyManager.DefaultCaptureModifiers, HotkeyManager.DefaultCaptureKeyCode);
+    }
+
+    private static string FormatHotkey(string modsKey, string vkKey, uint defMods, int defVk)
+    {
+        uint mods = (uint)AppSettings.GetInt(modsKey, (int)defMods);
+        int vk = AppSettings.GetInt(vkKey, defVk);
         var sb = new System.Text.StringBuilder();
         if ((mods & NativeMethods.MOD_CONTROL) != 0) sb.Append("Ctrl+");
         if ((mods & NativeMethods.MOD_ALT) != 0) sb.Append("Alt+");
         if ((mods & NativeMethods.MOD_SHIFT) != 0) sb.Append("Shift+");
         if ((mods & NativeMethods.MOD_WIN) != 0) sb.Append("Win+");
         sb.Append(KeyInterop.KeyFromVirtualKey(vk));
-        HotkeyDisplay.Text = sb.ToString();
+        return sb.ToString();
     }
 
     // MARK: - Launch at login

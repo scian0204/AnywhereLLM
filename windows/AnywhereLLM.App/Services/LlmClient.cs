@@ -9,7 +9,7 @@ namespace AnywhereLLM.Services;
 // Loc = the localization table (renamed from Localization to avoid clashing with
 // System.Windows.Localization in files that use `using System.Windows;`).
 
-public sealed record ChatMessage(string Role, string Content);
+public sealed record ChatMessage(string Role, string Content, string? ImagePngBase64 = null);
 
 /// User-facing LLM failure (ports LLMError). Message is already localized.
 public sealed class LlmException(string message) : Exception(message);
@@ -182,7 +182,19 @@ public sealed class LlmClient
         {
             ["model"] = model,
             ["stream"] = true,
-            ["messages"] = messages.Select(m => new { role = m.Role, content = m.Content }).ToArray(),
+            ["messages"] = messages.Select<ChatMessage, object>(m =>
+            {
+                if (ollamaNative)
+                {
+                    // Ollama native: image is a sibling `images:[b64]` key, content stays a string.
+                    var images = ChatImageContent.OllamaImages(m.ImagePngBase64);
+                    return images == null
+                        ? new { role = m.Role, content = m.Content }
+                        : (object)new { role = m.Role, content = m.Content, images };
+                }
+                // OpenAI-compatible: content becomes a text+image_url parts array when present.
+                return new { role = m.Role, content = ChatImageContent.OpenAI(m.Content, m.ImagePngBase64) };
+            }).ToArray(),
         };
         if (ollamaNative)
             payload["think"] = false; // native API only — blocks thinking-token generation
@@ -220,7 +232,7 @@ public sealed class LlmClient
             ["stream"] = true,
             ["system"] = system,
             ["messages"] = messages.Where(m => m.Role != "system")
-                .Select(m => new { role = m.Role, content = m.Content }).ToArray(),
+                .Select(m => new { role = m.Role, content = ChatImageContent.Anthropic(m.Content, m.ImagePngBase64) }).ToArray(),
         };
 
         var request = new HttpRequestMessage(HttpMethod.Post, AnthropicOAuth.MessagesUrl)

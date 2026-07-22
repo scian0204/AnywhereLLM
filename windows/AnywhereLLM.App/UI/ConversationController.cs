@@ -49,6 +49,12 @@ internal sealed class ConversationController
 
     // Derived.
     public bool HasSelection => !string.IsNullOrEmpty(_context.SelectedText);
+    /// True when this session is an image (screen-capture) query — always view-only.
+    public bool HasImage => _context.Image != null;
+    /// Captured PNG bytes for the panel thumbnail; null for text sessions.
+    public byte[]? CapturedImage => _context.Image;
+    /// Base64 of the captured image; attached to the first user message only.
+    private string? ImageBase64 => _context.Image is { } b ? Convert.ToBase64String(b) : null;
     public bool IsViewOnly => !_context.IsEditable;
     public string ApplyMode => AppSettings.GetString(ApplyModeKey, "preview");
     public bool ShowsTranscriptUI => IsViewOnly || HasSelection || ApplyMode != "immediate";
@@ -74,10 +80,12 @@ internal sealed class ConversationController
         if (IsStreaming) return false;
 
         var profile = (AppSettings.GetString(SystemPromptKey) ?? "").Trim();
-        // With a selection the first turn may be empty (the profile is the instruction),
-        // but only if the profile is non-empty — else an instruction-less request would
-        // auto-replace the selection in immediate mode.
-        if (trimmed.Length == 0 && !(HasSelection && TranscriptIsEmpty && profile.Length > 0))
+        // First turn may be empty. Images are always view-only, so an instruction-less
+        // send is harmless — allowed even without a profile. Selection still requires a
+        // non-empty profile (else an instruction-less reply would auto-replace it in
+        // immediate mode).
+        if (trimmed.Length == 0
+            && !(TranscriptIsEmpty && (HasImage || (HasSelection && profile.Length > 0))))
             return false;
 
         ErrorMessage = null;
@@ -177,6 +185,13 @@ internal sealed class ConversationController
         var messages = new List<ChatMessage> { new("system", SystemContent()) };
         messages.AddRange(prior);
         messages.Add(new ChatMessage("user", composed));
+        // 이미지 질의: 캡처 이미지를 첫 user 메시지에만 붙인다. 매 턴 첫 user 턴에
+        // 재부착해 multi-turn에서도 이미지 컨텍스트가 유지된다 (prior는 텍스트만 복원).
+        if (ImageBase64 is { } b64)
+        {
+            int i = messages.FindIndex(m => m.Role == "user");
+            if (i >= 0) messages[i] = messages[i] with { ImagePngBase64 = b64 };
+        }
 
         IsStreaming = true;
         RaiseChanged();

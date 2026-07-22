@@ -47,6 +47,12 @@ final class ConversationController: ObservableObject {
     let context: TargetContext
     /// True when there was a selection to replace (select mode), false for insert mode.
     var hasSelection: Bool { (context.selectedText?.isEmpty == false) }
+    /// True when this session is an image (screen-capture) query — always view-only.
+    var hasImage: Bool { context.image != nil }
+    /// Captured PNG bytes for the panel thumbnail; nil for text sessions.
+    var capturedImageData: Data? { context.image }
+    /// Base64 of the captured image; attached to the first user message only.
+    private var imageBase64: String? { context.image?.base64EncodedString() }
 
     private let client: LLMClient
     private let defaults: UserDefaults
@@ -95,7 +101,12 @@ final class ConversationController: ObservableObject {
         // 무지시 응답이 선택을 자동 교체해버리므로 막는다.
         let profile = (defaults.string(forKey: Self.systemPromptKey) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || (hasSelection && transcript.isEmpty && !profile.isEmpty) else { return false }
+        // 첫 턴은 빈 입력 허용 — 이미지는 항상 보기 전용이라 무지시 전송이 무해하므로
+        // 프로필이 없어도 허용. 선택은 immediate 모드 자동 교체 위험 때문에 프로필이
+        // 비어 있으면 막는다(무지시 응답이 선택을 덮어쓰는 것 방지).
+        guard !trimmed.isEmpty
+            || (transcript.isEmpty && (hasImage || (hasSelection && !profile.isEmpty)))
+        else { return false }
         errorMessage = nil
         pendingResult = nil
 
@@ -192,9 +203,14 @@ final class ConversationController: ObservableObject {
         let assistantIndex = transcript.count
         transcript.append(TranscriptEntry(role: .assistant, text: ""))
 
-        let messages = [ChatMessage(role: "system", content: systemContent())]
+        var messages = [ChatMessage(role: "system", content: systemContent())]
             + prior
             + [ChatMessage(role: "user", content: composed)]
+        // 이미지 질의: 캡처 이미지를 첫 user 메시지에만 붙인다. 매 턴 첫 user 턴에
+        // 재부착해 multi-turn에서도 이미지 컨텍스트가 유지된다 (prior는 텍스트만 복원).
+        if let b64 = imageBase64, let i = messages.firstIndex(where: { $0.role == "user" }) {
+            messages[i].imageBase64 = b64
+        }
         isStreaming = true
 
         streamTask = Task { [weak self] in

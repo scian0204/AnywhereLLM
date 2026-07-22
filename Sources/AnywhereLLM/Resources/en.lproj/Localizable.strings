@@ -2,6 +2,7 @@
 "input.ask" = "Ask anything… (⏎ send, ⇧⏎ newline, Esc close)";
 "input.instructFirst" = "Enter instructions — empty ⏎ sends the prompt alone (Esc close)";
 "input.instruct" = "Enter instructions… (⏎ send, ⇧⏎ newline, Esc close)";
+"input.imageFirst" = "Ask about the image — empty ⏎ sends the prompt alone (Esc close)";
 "panel.generating" = "Generating…";
 "panel.replace" = "Replace (⌘⏎)";
 "panel.insert" = "Insert (⌘⏎)";
@@ -49,10 +50,17 @@
 "settings.defaultProfile" = "Default";
 "settings.profileName" = "Profile Name";
 "settings.hotkey" = "Hotkey";
+"settings.hotkeyPanel" = "Prompt panel";
+"settings.hotkeyCapture" = "Screen capture";
 "settings.recordingKeys" = "Waiting for keys…";
 "settings.record" = "Record";
 "settings.system" = "System";
 "settings.launchAtLogin" = "Launch at login";
+
+/* Screen capture */
+"screenRecording.neededTitle" = "Screen Recording permission required";
+"screenRecording.neededMessage" = "AnywhereLLM needs Screen Recording permission to capture a screen region. Enable it in System Settings ▸ Privacy & Security ▸ Screen Recording, then restart the app.";
+"screenRecording.openSettings" = "Open Settings";
 
 /* Common */
 "common.ok" = "OK";

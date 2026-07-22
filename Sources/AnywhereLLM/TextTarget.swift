@@ -10,6 +10,9 @@ struct TargetContext {
     let isSecureField: Bool     // 하드 차단용
     let isEditable: Bool        // false = 결과 삽입 불가 대상 — 보기 전용 흐름
     let axElement: AXUIElement? // 쓰기 시 재사용
+    /// 스크린 캡쳐 이미지 질의의 PNG 바이트. 텍스트 캡처 경로에선 nil (기본).
+    /// 있으면 isEditable=false로 구성되어 기존 보기 전용 흐름을 그대로 탄다.
+    var image: Data? = nil
 }
 
 /// Read/write abstraction for the system-wide focused text element.

@@ -2,6 +2,7 @@
 "input.ask" = "무엇이든 물어보세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)";
 "input.instructFirst" = "지시 입력 — 비워둔 채 ⏎면 프롬프트만으로 요청 (Esc 닫기)";
 "input.instruct" = "지시를 입력하세요… (⏎ 전송, ⇧⏎ 줄바꿈, Esc 닫기)";
+"input.imageFirst" = "이미지에 대해 질문 — 비워둔 채 ⏎면 프롬프트만으로 요청 (Esc 닫기)";
 "panel.generating" = "생성 중…";
 "panel.replace" = "교체 (⌘⏎)";
 "panel.insert" = "삽입 (⌘⏎)";
@@ -49,10 +50,17 @@
 "settings.defaultProfile" = "기본";
 "settings.profileName" = "프로필 이름";
 "settings.hotkey" = "핫키";
+"settings.hotkeyPanel" = "프롬프트 패널";
+"settings.hotkeyCapture" = "화면 캡쳐";
 "settings.recordingKeys" = "키 입력 대기…";
 "settings.record" = "녹화";
 "settings.system" = "시스템";
 "settings.launchAtLogin" = "로그인 시 시작";
+
+/* 화면 캡쳐 */
+"screenRecording.neededTitle" = "화면 기록 권한 필요";
+"screenRecording.neededMessage" = "화면 영역을 캡쳐하려면 화면 기록 권한이 필요합니다. 시스템 설정 ▸ 개인정보 보호 및 보안 ▸ 화면 기록에서 켠 뒤 앱을 재시작하세요.";
+"screenRecording.openSettings" = "설정 열기";
 
 /* 공통 */
 "common.ok" = "확인";
