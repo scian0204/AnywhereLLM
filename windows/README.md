@@ -3,7 +3,9 @@
 Windows port of the macOS menu-bar app. Tray-resident; a global hotkey
 (default **Ctrl+Shift+Space**) opens a floating panel that sends the focused
 text / selection to an OpenAI-compatible LLM and types the result back into
-whatever app you were in.
+whatever app you were in. A second hotkey (default **Ctrl+Shift+2**, configurable
+in Settings) starts a drag-to-select screen capture (Win+Shift+S style) and opens
+the same panel to ask a vision-capable model about the captured image.
 
 Design rationale and the full macOS→Windows mapping: [`../docs/progress/31-windows-port.md`](../docs/progress/31-windows-port.md).
 

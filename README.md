@@ -53,10 +53,15 @@ Select text that has nowhere to insert into — someone else's message, a web pa
 
 <img src="docs/assets/demo-viewonly.gif" width="760" alt="View-only demo — selecting a received English message and reading the Korean translation in the panel">
 
+### 📸 Screenshot — capture a region and ask about it
+
+Press the capture hotkey (<kbd>⌘⇧2</kbd> by default), drag to select any region of the screen — just like <kbd>⌘⇧4</kbd> — and the same panel opens with the captured image, ready for you to ask a vision-capable model about it.
+
 ## Features
 
 - **Zero-focus-loss panel** — built on `.nonactivatingPanel`. The target app stays frontmost even while the panel receives key input. The whole reason this app exists.
 - **Global hotkey** — <kbd>⌘⇧Space</kbd> by default, configurable in Settings. Press again during streaming to cancel.
+- **Screenshot queries** — a second global hotkey (<kbd>⌘⇧2</kbd> by default, configurable) starts a drag-to-select screen capture; the image opens in the same panel to ask a vision-capable model about it. Needs the Screen Recording permission on macOS.
 - **3 UX modes, chosen automatically** — editability × selection state is determined via the Accessibility (AX) API to pick insert / replace / view-only automatically.
 - **Clipboard-untouched writes** — AX insertion first, falling back to synthesized Unicode key-event typing. Never dirties your copy buffer.
 - **OpenAI-compatible API** — chat completions SSE streaming. Includes local servers like Ollama, LM Studio, and vLLM.
@@ -130,6 +135,7 @@ no accessibility permission is needed, unlike macOS. Details: [windows/README.md
 3. Type a request → <kbd>⏎</kbd> — the response is typed right where your cursor is
 4. Invoke **with text selected** for replace mode — the profile acts as the instruction, so an empty <kbd>⏎</kbd> is enough to send
 5. <kbd>⌘P</kbd> + <kbd>↑</kbd><kbd>↓</kbd> switches profiles inside the panel, <kbd>Esc</kbd> closes it
+6. Press <kbd>⌘⇧2</kbd> to capture a screen region and ask a vision-capable model about the image
 
 <br clear="right">
 
