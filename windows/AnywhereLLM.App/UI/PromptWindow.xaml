@@ -15,7 +15,8 @@
     <StackPanel Margin="12">
       <DockPanel x:Name="ProfileRow" LastChildFill="False" Margin="0,0,0,8">
         <ComboBox x:Name="ProfileBox" DockPanel.Dock="Left" MinWidth="120"
-                  SelectionChanged="ProfileBox_SelectionChanged"/>
+                  SelectionChanged="ProfileBox_SelectionChanged"
+                  DropDownClosed="ProfileBox_DropDownClosed"/>
         <TextBlock DockPanel.Dock="Left" Text="Ctrl+P" Margin="6,0,0,0"
                    VerticalAlignment="Center" Opacity="0.5" FontSize="11"/>
       </DockPanel>

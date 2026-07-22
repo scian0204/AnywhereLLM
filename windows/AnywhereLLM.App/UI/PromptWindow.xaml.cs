@@ -1,5 +1,7 @@
+using System;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using AnywhereLLM.Services;
 
 namespace AnywhereLLM.UI;
@@ -137,6 +139,18 @@ public partial class PromptWindow : Window
     {
         if (_loadingProfiles) return;
         if (ProfileBox.SelectedItem is string name) PromptProfile.SetActive(name, _profiles);
+    }
+
+    private void ProfileBox_DropDownClosed(object? sender, EventArgs e)
+    {
+        // After Ctrl+P picks a profile, hand focus back to the input field. Deferred to
+        // Input priority — focus set during DropDownClosed is swallowed as the ComboBox
+        // reclaims focus on close.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            InputBox.Focus();
+            Keyboard.Focus(InputBox);
+        }), DispatcherPriority.Input);
     }
 
     // MARK: - Input handling
