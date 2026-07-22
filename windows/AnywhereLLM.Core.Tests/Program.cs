@@ -132,6 +132,44 @@ t.Eq("OAuth.resolveReplacesNonClaude", AnthropicOAuth.ResolveModel("gpt-4o-mini"
 t.Eq("OAuth.systemPrefixExact",
     AnthropicOAuth.SystemPrefix, "You are Claude Code, Anthropic's official CLI for Claude.");
 
+// ---- UpdateCheck -------------------------------------------------------------
+t.Eq("Update.newerMinor", UpdateCheck.IsNewer("0.4.1", "0.5.0"), true);
+t.Eq("Update.newerDoubleDigit", UpdateCheck.IsNewer("0.4.1", "0.4.10"), true);
+t.Eq("Update.equalNotNewer", UpdateCheck.IsNewer("0.5.0", "0.5.0"), false);
+t.Eq("Update.olderNotNewer", UpdateCheck.IsNewer("0.5.0", "0.4.9"), false);
+t.Eq("Update.vPrefixStripped", UpdateCheck.IsNewer("0.4.1", "v0.5.0"), true);
+t.Eq("Update.garbageNotNewer", UpdateCheck.IsNewer("0.4.1", "garbage"), false);
+t.Eq("Update.shorterCurrent", UpdateCheck.IsNewer("0.4", "0.4.1"), true);
+
+const string relJson = """
+{"tag_name":"v0.5.0","assets":[
+{"name":"AnywhereLLM-0.5.0-win-x64.zip","browser_download_url":"https://x/win.zip","size":123},
+{"name":"AnywhereLLM-0.5.0-x64.msi","browser_download_url":"https://x/app.msi","size":456},
+{"name":"SHA256SUMS.txt","browser_download_url":"https://x/sums","size":10}]}
+""";
+var rel = UpdateCheck.ParseLatestRelease(relJson);
+t.Eq("Update.parseTag", rel?.Tag, "v0.5.0");
+t.Eq("Update.parseAssetCount", rel?.Assets.Count, 3);
+t.Eq("Update.pickWinZip",
+    UpdateCheck.PickAsset(rel!.Assets, "-win-x64.zip")?.Name, "AnywhereLLM-0.5.0-win-x64.zip");
+t.Eq("Update.pickWinUrl",
+    UpdateCheck.PickAsset(rel!.Assets, "-win-x64.zip")?.DownloadUrl, "https://x/win.zip");
+t.Eq("Update.pickMacNoneOnWin", UpdateCheck.PickAsset(rel!.Assets, "-macos.zip"), null);
+t.Eq("Update.parseMalformed", UpdateCheck.ParseLatestRelease("{not json"), null);
+t.Eq("Update.parseNoTag", UpdateCheck.ParseLatestRelease("{}"), null);
+
+var sums = UpdateCheck.ParseChecksums(
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  AnywhereLLM-0.5.0-win-x64.zip\n" +
+    "# a comment line\n" +
+    "0000000000000000000000000000000000000000000000000000000000000000 *AnywhereLLM-0.5.0-x64.msi\n");
+t.Eq("Update.checksumWinZip",
+    sums.TryGetValue("AnywhereLLM-0.5.0-win-x64.zip", out var h1) ? h1 : null,
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+t.Eq("Update.checksumBinaryMarker",
+    sums.TryGetValue("AnywhereLLM-0.5.0-x64.msi", out var h2) ? h2 : null,
+    "0000000000000000000000000000000000000000000000000000000000000000");
+t.Eq("Update.checksumCount", sums.Count, 2);
+
 return t.Report();
 
 sealed class Runner
