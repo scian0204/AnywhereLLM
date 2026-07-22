@@ -83,6 +83,14 @@ public static class Loc
         ["menu.settings"] = "Settings…",
         ["menu.build"] = "Build {0}",
         ["menu.quit"] = "Quit",
+        ["update.check"] = "Check for Updates…",
+        ["update.checking"] = "Checking…",
+        ["update.downloading"] = "Downloading…",
+        ["update.upToDate"] = "You're on the latest version.",
+        ["update.availableTitle"] = "Update available",
+        ["update.availableMessage"] = "A new version ({0}) is available. Install it now? The app will restart.",
+        ["update.notWritable"] = "Can't update in place — the install folder isn't writable. The releases page has been opened so you can update manually.",
+        ["update.failed"] = "Update failed: {0}",
     };
 
     private static readonly Dictionary<string, string> Korean = new()
@@ -150,5 +158,13 @@ public static class Loc
         ["menu.settings"] = "설정…",
         ["menu.build"] = "빌드 {0}",
         ["menu.quit"] = "종료",
+        ["update.check"] = "업데이트 확인…",
+        ["update.checking"] = "확인 중…",
+        ["update.downloading"] = "다운로드 중…",
+        ["update.upToDate"] = "최신 버전입니다.",
+        ["update.availableTitle"] = "업데이트 있음",
+        ["update.availableMessage"] = "새 버전 ({0})이 있습니다. 지금 설치할까요? 앱이 재시작됩니다.",
+        ["update.notWritable"] = "제자리 업데이트 불가 — 설치 폴더에 쓰기 권한이 없습니다. 수동 설치를 위해 릴리즈 페이지를 열었습니다.",
+        ["update.failed"] = "업데이트 실패: {0}",
     };
 }

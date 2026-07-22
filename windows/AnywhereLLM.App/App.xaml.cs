@@ -14,6 +14,8 @@ public partial class App : Application
     private Forms.NotifyIcon? _tray;
     private HotkeyManager? _hotkey;
     private PromptWindow? _panel;
+    private Forms.ToolStripMenuItem? _updateItem;
+    private bool _updateBusy;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -23,12 +25,18 @@ public partial class App : Application
 
         _hotkey = new HotkeyManager(() => Dispatcher.Invoke(TogglePanel));
         if (!_hotkey.Start()) WarnHotkeyConflict();
+
+        UpdateService.CleanupOldExe();                  // clear a previous update's "<exe>.old"
+        _ = CheckForUpdatesAsync(auto: true);           // silent auto-check on launch
     }
 
     private void SetupTray()
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add(Loc.L("menu.settings"), null, (_, _) => Dispatcher.Invoke(OpenSettings));
+        _updateItem = new Forms.ToolStripMenuItem(Loc.L("update.check"), null,
+            (_, _) => Dispatcher.Invoke(() => _ = CheckForUpdatesAsync(auto: false)));
+        menu.Items.Add(_updateItem);
         menu.Items.Add(new Forms.ToolStripMenuItem(Loc.L("menu.build", BuildVersion())) { Enabled = false });
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(Loc.L("menu.quit"), null, (_, _) => Dispatcher.Invoke(Shutdown));
@@ -69,6 +77,45 @@ public partial class App : Application
     private void WarnHotkeyConflict()
         => Forms.MessageBox.Show(Loc.L("hotkey.conflictMessage"),
                                  Loc.L("hotkey.conflictTitle"));
+
+    /// Check GitHub for a newer release. auto=true is the silent launch check (no
+    /// "up to date" popup, failures swallowed); auto=false is the tray menu action.
+    /// On a confirmed+applied update the app shuts down so the helper can swap the exe.
+    private async Task CheckForUpdatesAsync(bool auto)
+    {
+        if (_updateBusy) return;
+        _updateBusy = true;
+        if (_updateItem != null) { _updateItem.Enabled = false; _updateItem.Text = Loc.L("update.checking"); }
+        try
+        {
+            var rel = await UpdateService.CheckAsync();
+            if (rel is null)
+            {
+                if (!auto) Forms.MessageBox.Show(Loc.L("update.upToDate"), "AnywhereLLM");
+                return;
+            }
+
+            var choice = Forms.MessageBox.Show(
+                Loc.L("update.availableMessage", rel.Tag), Loc.L("update.availableTitle"),
+                Forms.MessageBoxButtons.YesNo, Forms.MessageBoxIcon.Information);
+            if (choice != Forms.DialogResult.Yes) return;
+
+            if (_updateItem != null) _updateItem.Text = Loc.L("update.downloading");
+            var applied = await UpdateService.DownloadAndApplyAsync(rel);
+            if (applied) { Shutdown(); return; }   // helper waits for our exit, then swaps + relaunches
+            Forms.MessageBox.Show(Loc.L("update.notWritable"), "AnywhereLLM");
+        }
+        catch (Exception ex)
+        {
+            Forms.MessageBox.Show(Loc.L("update.failed", ex.Message), "AnywhereLLM",
+                Forms.MessageBoxButtons.OK, Forms.MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _updateBusy = false;
+            if (_updateItem != null) { _updateItem.Enabled = true; _updateItem.Text = Loc.L("update.check"); }
+        }
+    }
 
     private static string BuildVersion()
         => Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "?";
