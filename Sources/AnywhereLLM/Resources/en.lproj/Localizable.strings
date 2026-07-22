@@ -80,3 +80,12 @@
 "menu.settings" = "Settings…";
 "menu.build" = "Build %@";
 "menu.quit" = "Quit";
+
+/* Self-update */
+"update.check" = "Check for Updates…";
+"update.upToDate" = "You're on the latest version.";
+"update.availableTitle" = "Update available";
+"update.availableMessage" = "A new version (%@) is available. Install it now? The app will restart.";
+"update.installNow" = "Install Now";
+"update.notWritable" = "Can't update in place — the app folder isn't writable. The releases page has been opened so you can update manually.";
+"update.failed" = "Update failed: %@";

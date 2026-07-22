@@ -51,6 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibilityTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshAccessibility() }
         }
+
+        // 실행 시 조용히 업데이트 확인 — 새 버전이면 프롬프트 (실패는 무시).
+        Task { await runUpdateCheck(auto: true) }
     }
 
     // MARK: - Prompt panel
@@ -172,6 +175,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsWindowController.shared.show()
     }
 
+    // MARK: - Self-update
+
+    private var updateBusy = false
+
+    @objc private func checkForUpdates() {
+        Task { await runUpdateCheck(auto: false) }
+    }
+
+    /// auto=true는 실행 시 조용한 확인(최신이면 무반응), auto=false는 메뉴 동작.
+    /// 확인+적용되면 앱을 종료 — 헬퍼가 우리 종료를 기다렸다 번들을 교체·재실행한다.
+    private func runUpdateCheck(auto: Bool) async {
+        if updateBusy { return }
+        updateBusy = true
+        defer { updateBusy = false }
+
+        guard let rel = await UpdateService.check() else {
+            if !auto { infoAlert(L("update.upToDate")) }
+            return
+        }
+
+        let confirm = NSAlert()
+        confirm.messageText = L("update.availableTitle")
+        confirm.informativeText = L("update.availableMessage", rel.tag)
+        confirm.addButton(withTitle: L("update.installNow"))
+        confirm.addButton(withTitle: L("common.cancel"))
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+
+        do {
+            if try await UpdateService.downloadAndApply(rel) {
+                NSApp.terminate(nil)
+            } else {
+                infoAlert(L("update.notWritable"))
+            }
+        } catch {
+            infoAlert(L("update.failed", error.localizedDescription))
+        }
+    }
+
+    private func infoAlert(_ text: String) {
+        let a = NSAlert()
+        a.messageText = "AnywhereLLM"
+        a.informativeText = text
+        a.addButton(withTitle: L("common.ok"))
+        a.runModal()
+    }
+
     // MARK: - Main menu (Edit menu for text-editing key routing)
 
     /// Accessory apps get no default main menu, so ⌘A/⌘C/⌘V/⌘Z don't route to the
@@ -221,6 +270,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = NSMenuItem(title: L("menu.settings"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
+
+        let update = NSMenuItem(title: L("update.check"), action: #selector(checkForUpdates), keyEquivalent: "")
+        update.target = self
+        menu.addItem(update)
 
         menu.addItem(.separator())
         // 실행 중인 바이너리가 어느 빌드인지 즉시 식별 (Makefile이 빌드 시각 스탬프).
