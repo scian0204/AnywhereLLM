@@ -80,7 +80,7 @@ public func parseChecksums(_ text: String) -> [String: String] {
     var map: [String: String] = [:]
     let regex = try! NSRegularExpression(pattern: "^([0-9a-fA-F]{64})\\s+\\*?(.+)$")
     for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
-        let line = rawLine.trimmingCharacters(in: .whitespaces)
+        let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines) // CRLF의 \r 포함 제거
         let range = NSRange(line.startIndex..., in: line)
         guard let m = regex.firstMatch(in: line, range: range),
               let hashR = Range(m.range(at: 1), in: line),
