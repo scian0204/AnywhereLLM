@@ -21,8 +21,14 @@ $zip     = Join-Path $PSScriptRoot "AnywhereLLM-$version-win-x64.zip"
 $sums    = Join-Path $PSScriptRoot "SHA256SUMS.txt"
 
 Write-Host "== publishing self-contained exe (v$version) =="
+# Remove any prior publish output so a failed compile can't leave a stale exe to package.
+$pubDir = Split-Path $exe -Parent
+if (Test-Path $pubDir) { Remove-Item $pubDir -Recurse -Force }
 dotnet publish $proj -c Release -r $Runtime --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+# dotnet is a native exe: a non-zero exit does NOT throw under $ErrorActionPreference, so
+# check it explicitly — otherwise a compile failure silently ships whatever exe lingered.
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 if (-not (Test-Path $exe)) { throw "publish produced no exe at $exe" }
 
 Write-Host "== building MSI =="

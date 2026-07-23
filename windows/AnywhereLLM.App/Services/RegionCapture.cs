@@ -78,7 +78,7 @@ public static class RegionCapture
         {
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
-            Background = new SolidColorBrush(Color.FromArgb(80, 0, 0, 0)); // dim, but hit-testable
+            Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(80, 0, 0, 0)); // dim, but hit-testable
             ShowInTaskbar = false;
             Topmost = true;
             ResizeMode = ResizeMode.NoResize;
@@ -87,9 +87,9 @@ public static class RegionCapture
 
             _rect = new System.Windows.Shapes.Rectangle
             {
-                Stroke = Brushes.DeepSkyBlue,
+                Stroke = System.Windows.Media.Brushes.DeepSkyBlue,
                 StrokeThickness = 1.5,
-                Fill = new SolidColorBrush(Color.FromArgb(40, 0, 150, 255)),
+                Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 0, 150, 255)),
                 Visibility = Visibility.Collapsed,
             };
             _canvas.Children.Add(_rect);
